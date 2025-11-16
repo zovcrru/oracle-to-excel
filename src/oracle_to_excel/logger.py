@@ -1,8 +1,8 @@
 """
-Модуль системы логирования для Oracle Excel Exporter.
+Centralized logging system module for Oracle Excel Exporter.
 
-Настраивает централизованное логирование с поддержкой
-ротации файлов и фильтрации чувствительных данных.
+Configures centralized logging with support for
+file rotation and sensitive data filtering.
 """
 
 # PEP 649: Deferred annotation evaluation
@@ -16,29 +16,29 @@ from collections.abc import Callable, Sequence
 from functools import wraps
 from pathlib import Path
 from time import perf_counter
-from typing import ParamSpec, TypeAlias, TypeVar
+from typing import ParamSpec, TypeVar
 
-# Type aliases для улучшенной читаемости (Python 3.12+)
-LogLevel: TypeAlias = str | int
-FilterFunc: TypeAlias = Callable[[logging.LogRecord], bool]
+# Type aliases for improved readability (Python 3.14+)
+type LogLevel = str | int
+type FilterFunc = Callable[[logging.LogRecord], bool]
 
-# Generic types для декораторов (PEP 695)
+# Generic types for decorators (PEP 695)
 P = ParamSpec('P')
 R = TypeVar('R')
 
-# Константы
+# Constants
 DEFAULT_LOG_FORMAT: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 DEFAULT_DATE_FORMAT: str = '%Y-%m-%d %H:%M:%S'
 MAX_LOG_FILE_SIZE: int = 10 * 1024 * 1024  # 10 MB
 BACKUP_COUNT: int = 3
 
-# Паттерны для маскирования чувствительных данных
+# Patterns for masking sensitive data
 SENSITIVE_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r'password["\']?\s*[:=]\s*["\']?([^"\'\\s]+)', r'password=***'),
-    (r'PASSWORD["\']?\s*[:=]\s*["\']?([^"\'\\s]+)', r'PASSWORD=***'),
-    (r'token["\']?\s*[:=]\s*["\']?([^"\'\\s]+)', r'token=***'),
-    (r'secret["\']?\s*[:=]\s*["\']?([^"\'\\s]+)', r'secret=***'),
-    (r'apikey["\']?\s*[:=]\s*["\']?([^"\'\\s]+)', r'apikey=***'),
+    (r"password[\"']?\s*[:=]\s*[\"']?([^\"'\\s]+)", r'password=***'),
+    (r"PASSWORD[\"']?\s*[:=]\s*[\"']?([^\"'\\s]+)", r'PASSWORD=***'),
+    (r"token[\"']?\s*[:=]\s*[\"']?([^\"'\\s]+)", r'token=***'),
+    (r"secret[\"']?\s*[:=]\s*[\"']?([^\"'\\s]+)", r'secret=***'),
+    (r"apikey[\"']?\s*[:=]\s*[\"']?([^\"'\\s]+)", r'apikey=***'),
 )
 
 
@@ -46,121 +46,139 @@ def setup_logging(
     log_level: LogLevel = 'INFO',
     log_file: str | Path | None = None,
     logger_name: str = 'oracle_exporter',
+    *,
     console_output: bool = True,
     mask_sensitive: bool = True,
 ) -> logging.Logger:
     """
-    Настраивает систему логирования с поддержкой консоли и файлов.
+    Configure logging system with console and file support.
 
-    Использует улучшенную систему типов Python 3.14 и pattern matching
-    для гибкой конфигурации логгеров.
+    Uses enhanced Python 3.14 type system and pattern matching
+    for flexible logger configuration.
 
     Args:
-        log_level: Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-        log_file: Путь к файлу логов (опционально).
-        logger_name: Имя логгера.
-        console_output: Выводить ли логи в консоль.
-        mask_sensitive: Маскировать ли чувствительные данные.
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+        log_file: Path to log file (optional).
+        logger_name: Logger name.
+        console_output: Whether to output logs to console.
+        mask_sensitive: Whether to mask sensitive data.
 
     Returns:
-        Настроенный объект Logger.
+        Configured Logger object.
 
     Example:
         >>> logger = setup_logging('DEBUG', 'app.log')
-        >>> logger.info('Приложение запущено')
+        >>> logger.info('Application started')
     """
-    # Получаем или создаем логгер
+    # Get or create logger
     logger = logging.getLogger(logger_name)
 
-    # Очищаем существующие handlers (избегаем дублирования)
+    # Clear existing handlers (avoid duplication)
     logger.handlers.clear()
 
-    # Устанавливаем уровень логирования
+    # Set logging level
     numeric_level = _parse_log_level(log_level)
     logger.setLevel(numeric_level)
 
-    # Создаем форматтер
+    # Create formatter
     formatter = _create_formatter(DEFAULT_LOG_FORMAT, DEFAULT_DATE_FORMAT)
 
-    # Pattern matching для настройки handlers (улучшен в Python 3.14)
+    # Pattern matching for handler configuration (improved in Python 3.14)
     match (console_output, log_file):
         case (True, None):
-            # Только консольный вывод
+            # console only
             _add_console_handler(logger, formatter)
         case (False, str() | Path() as file):
-            # Только файловый вывод
+            # file only
             _add_file_handler(logger, formatter, file)
         case (True, str() | Path() as file):
-            # Оба варианта
+            # both console and file
             _add_console_handler(logger, formatter)
             _add_file_handler(logger, formatter, file)
         case (False, None):
-            # Fallback: хотя бы консоль
+            # Fallback: at least console
             _add_console_handler(logger, formatter)
-            logger.warning('Логирование не настроено должным образом, используется консоль')
+            logger.warning('Logging not configured properly, using console')
 
-    # Добавляем фильтр для маскирования чувствительных данных
+    # Add filter for masking sensitive data
     if mask_sensitive:
         logger.addFilter(_create_sensitive_filter())
 
-    logger.debug(f"Логгер '{logger_name}' настроен с уровнем {logging.getLevelName(numeric_level)}")
+    logger.debug(
+        'Logger %r configured with level %s',
+        logger_name,
+        logging.getLevelName(numeric_level),
+    )
 
     return logger
 
 
 def _parse_log_level(level: LogLevel) -> int:
     """
-    Преобразует строковый уровень логирования в числовой.
+    Convert string logging level to numeric.
 
-    Использует pattern matching для обработки различных форматов.
+    Uses pattern matching for handling various formats.
 
     Args:
-        level: Уровень логирования (строка или число).
+        level: Logging level (string or number).
 
     Returns:
-        Числовой уровень логирования.
+        Numeric logging level.
 
     Raises:
-        ValueError: Если уровень некорректен.
+        ValueError: If level is invalid.
     """
     match level:
-        case int() as numeric_level if numeric_level in {0, 10, 20, 30, 40, 50}:
+        case int() as numeric_level if numeric_level in {
+            0,
+            10,
+            20,
+            30,
+            40,
+            50,
+        }:
             return numeric_level
         case str() as string_level:
             upper_level = string_level.upper()
             if hasattr(logging, upper_level):
                 return getattr(logging, upper_level)
-            raise ValueError(f'Некорректный уровень логирования: {level}')
+            raise ValueError(f'Invalid logging level: {level}')
         case _:
-            raise ValueError(f'Неподдерживаемый тип уровня логирования: {type(level)}')
+            raise ValueError(f'Unsupported logging level type: {type(level)}')
 
 
-def _create_formatter(fmt: str, datefmt: str) -> logging.Formatter:
+def _create_formatter(
+    fmt: str,
+    datefmt: str,
+) -> logging.Formatter:
     """
-    Создает форматтер для логов.
+    Create formatter for logs.
 
     Args:
-        fmt: Формат сообщения.
-        datefmt: Формат даты и времени.
+        fmt: Message format.
+        datefmt: Date and time format.
 
     Returns:
-        Объект Formatter.
+        Formatter object.
     """
     return logging.Formatter(fmt=fmt, datefmt=datefmt)
 
 
-def _add_console_handler(logger: logging.Logger, formatter: logging.Formatter) -> None:
+def _add_console_handler(
+    logger: logging.Logger,
+    formatter: logging.Formatter,
+) -> None:
     """
-    Добавляет handler для вывода в консоль.
+    Add console handler to logger.
 
     Args:
-        logger: Логгер для настройки.
-        formatter: Форматтер для handler.
+        logger: Logger to configure.
+        formatter: Formatter for handler.
     """
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
 
-    # Цветной вывод для консоли (если терминал поддерживает)
+    # Colored console output (if terminal supports it)
     if _supports_color():
         console_handler.setFormatter(_create_colored_formatter())
 
@@ -168,24 +186,29 @@ def _add_console_handler(logger: logging.Logger, formatter: logging.Formatter) -
 
 
 def _add_file_handler(
-    logger: logging.Logger, formatter: logging.Formatter, log_file: str | Path
+    logger: logging.Logger,
+    formatter: logging.Formatter,
+    log_file: str | Path,
 ) -> None:
     """
-    Добавляет RotatingFileHandler для записи в файл.
+    Add rotating file handler to logger.
 
     Args:
-        logger: Логгер для настройки.
-        formatter: Форматтер для handler.
-        log_file: Путь к файлу логов.
+        logger: Logger to configure.
+        formatter: Formatter for handler.
+        log_file: Path to log file.
     """
     file_path = Path(log_file)
 
-    # Создаем директорию если не существует
+    # Create directory if it doesn't exist
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Rotating handler для автоматической ротации файлов
+    # Rotating handler for automatic file rotation
     file_handler = logging.handlers.RotatingFileHandler(
-        filename=file_path, maxBytes=MAX_LOG_FILE_SIZE, backupCount=BACKUP_COUNT, encoding='utf-8'
+        filename=file_path,
+        maxBytes=MAX_LOG_FILE_SIZE,
+        backupCount=BACKUP_COUNT,
+        encoding='utf-8',
     )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -193,24 +216,24 @@ def _add_file_handler(
 
 def _supports_color() -> bool:
     """
-    Проверяет, поддерживает ли терминал цветной вывод.
+    Check if terminal supports colored output.
 
     Returns:
-        True если поддерживается, False иначе.
+        True if supported, False otherwise.
     """
     return (
         hasattr(sys.stdout, 'isatty')
         and sys.stdout.isatty()
-        and sys.platform != 'win32'  # Windows требует дополнительной настройки
+        and sys.platform != 'win32'  # Windows requires extra setup
     )
 
 
 def _create_colored_formatter() -> logging.Formatter:
     """
-    Создает форматтер с цветным выводом для консоли.
+    Create colored formatter for console.
 
     Returns:
-        Форматтер с ANSI escape codes для цветов.
+        Formatter with ANSI escape codes for colors.
     """
     # ANSI color codes
     colors = {
@@ -226,18 +249,22 @@ def _create_colored_formatter() -> logging.Formatter:
         def format(self, record: logging.LogRecord) -> str:
             levelname = record.levelname
             if levelname in colors:
-                record.levelname = f'{colors[levelname]}{levelname}{colors["RESET"]}'
+                colored = f'{colors[levelname]}{levelname}{colors["RESET"]}'
+                record.levelname = colored
             return super().format(record)
 
-    return ColoredFormatter(fmt=DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT)
+    return ColoredFormatter(
+        fmt=DEFAULT_LOG_FORMAT,
+        datefmt=DEFAULT_DATE_FORMAT,
+    )
 
 
 def _create_sensitive_filter() -> FilterFunc:
     """
-    Создает фильтр для маскирования чувствительных данных в логах.
+    Create filter for masking sensitive data in logs.
 
     Returns:
-        Функция-фильтр для логов.
+        Filter function for logs.
     """
     compiled_patterns = [
         (re.compile(pattern, re.IGNORECASE), replacement)
@@ -245,35 +272,37 @@ def _create_sensitive_filter() -> FilterFunc:
     ]
 
     def filter_sensitive(record: logging.LogRecord) -> bool:
-        """Маскирует чувствительные данные в сообщении лога."""
+        """Mask sensitive data in log message."""
         original_msg = record.getMessage()
 
-        # Применяем все паттерны маскирования
+        # Apply all masking patterns
         filtered_msg = original_msg
         for pattern, replacement in compiled_patterns:
             filtered_msg = pattern.sub(replacement, filtered_msg)
 
-        # Обновляем сообщение если что-то изменилось
+        # Update message if anything changed
         if filtered_msg != original_msg:
             record.msg = filtered_msg
             record.args = ()
 
-        return True  # Всегда пропускаем запись
+        return True  # Always allow record
 
     return filter_sensitive
 
 
-def log_execution_time[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+def log_execution_time[**P, R](
+    func: Callable[P, R],
+) -> Callable[P, R]:
     """
-    Декоратор для логирования времени выполнения функций.
+    Decorator to log function execution time.
 
-    Использует новый синтаксис generic функций Python 3.14 (PEP 695).
+    Uses new generic function syntax in Python 3.14 (PEP 695).
 
     Args:
-        func: Декорируемая функция.
+        func: Function to decorate.
 
     Returns:
-        Обернутая функция с логированием времени.
+        Wrapped function with timing logs.
 
     Example:
         >>> @log_execution_time
@@ -289,38 +318,51 @@ def log_execution_time[**P, R](func: Callable[P, R]) -> Callable[P, R]:
         func_name = func.__name__
         module_name = func.__module__
 
-        logger.debug(f'Начало выполнения: {module_name}.{func_name}')
+        logger.debug(
+            'Starting execution: %s.%s',
+            module_name,
+            func_name,
+        )
         start_time = perf_counter()
 
         try:
             result = func(*args, **kwargs)
+        except Exception:
             elapsed_time = perf_counter() - start_time
-
-            logger.info(f'Завершено: {module_name}.{func_name} (время: {elapsed_time:.4f}s)')
-
-            return result
-        except Exception as e:
-            elapsed_time = perf_counter() - start_time
-            logger.error(
-                f'Ошибка в {module_name}.{func_name} после {elapsed_time:.4f}s: {e}', exc_info=True
+            logger.exception(
+                'Error in %s.%s after %.4fs',
+                module_name,
+                func_name,
+                elapsed_time,
             )
             raise
+        else:
+            elapsed_time = perf_counter() - start_time
+            logger.info(
+                'Completed: %s.%s (time: %.4fs)',
+                module_name,
+                func_name,
+                elapsed_time,
+            )
+            return result
 
     return wrapper
 
 
 def log_function_call[**P, R](
-    log_args: bool = True, log_result: bool = False
+    *,
+    log_args: bool = True,
+    log_result: bool = False,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
-    Декоратор для подробного логирования вызовов функций.
+    Decorator for detailed function call logging.
 
     Args:
-        log_args: Логировать ли аргументы функции.
-        log_result: Логировать ли результат выполнения.
+        log_args: Whether to log function arguments.
+        log_result: Whether to log execution result.
 
     Returns:
-        Декоратор для функции.
+        Decorator for function.
 
     Example:
         >>> @log_function_call(log_args=True, log_result=True)
@@ -335,21 +377,29 @@ def log_function_call[**P, R](
 
             func_name = f'{func.__module__}.{func.__name__}'
 
-            # Логируем вызов
+            # Log call
             if log_args:
                 args_repr = ', '.join(repr(arg) for arg in args)
                 kwargs_repr = ', '.join(f'{k}={v!r}' for k, v in kwargs.items())
                 all_args = ', '.join(filter(None, [args_repr, kwargs_repr]))
-                logger.debug(f'Вызов: {func_name}({all_args})')
+                logger.debug(
+                    'Call: %s(%s)',
+                    func_name,
+                    all_args,
+                )
             else:
-                logger.debug(f'Вызов: {func_name}')
+                logger.debug('Call: %s', func_name)
 
-            # Выполняем функцию
+            # Execute function
             result = func(*args, **kwargs)
 
-            # Логируем результат
+            # Log result
             if log_result:
-                logger.debug(f'Результат {func_name}: {result!r}')
+                logger.debug(
+                    'Result %s: %r',
+                    func_name,
+                    result,
+                )
 
             return result
 
@@ -358,24 +408,26 @@ def log_function_call[**P, R](
     return decorator
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
+def get_logger(
+    name: str | None = None,
+) -> logging.Logger:
     """
-    Получает логгер по имени.
+    Get logger by name.
 
     Args:
-        name: Имя логгера. Если None, возвращает root logger приложения.
+        name: Logger name. If None, returns root app logger.
 
     Returns:
-        Объект Logger.
+        Logger object.
 
     Example:
         >>> logger = get_logger('oracle_exporter.database')
-        >>> logger.info('Подключение установлено')
+        >>> logger.info('Connection established')
     """
     if name is None:
         return logging.getLogger('oracle_exporter')
 
-    # Добавляем префикс если его нет
+    # Add prefix if not present
     if not name.startswith('oracle_exporter.'):
         name = f'oracle_exporter.{name}'
 
@@ -384,22 +436,24 @@ def get_logger(name: str | None = None) -> logging.Logger:
 
 def log_exception(
     logger: logging.Logger | None = None,
-    message: str = 'Произошла ошибка',
+    message: str = 'An error occurred',
     level: int = logging.ERROR,
 ) -> None:
     """
-    Логирует текущее исключение с трейсбеком.
+    Log current exception with traceback.
 
     Args:
-        logger: Логгер для использования. Если None, использует root.
-        message: Сообщение об ошибке.
-        level: Уровень логирования.
+        logger: Logger to use. If None, uses root.
+        message: Error message.
+        level: Logging level.
 
     Example:
-        >>> try:
-        ...     risky_operation()
-        ... except Exception:
-        ...     log_exception(logger, "Операция провалилась")
+        >>> from oracle_to_excel.logger import get_logger
+        >>> logger = get_logger()
+        >>> try:  # doctest: +SKIP
+        ...     1 / 0
+        ... except ZeroDivisionError:
+        ...     log_exception(logger, 'Operation failed')
     """
     if logger is None:
         logger = get_logger()
@@ -407,32 +461,46 @@ def log_exception(
     logger.log(level, message, exc_info=True)
 
 
-def create_context_logger(logger: logging.Logger, **context: str | int | float) -> Callable:
+def create_context_logger(
+    logger: logging.Logger,
+    **context: str | int | float,
+) -> Callable[
+    [str, str],
+    None,
+]:
     """
-    Создает функцию логирования с дополнительным контекстом.
+    Create logging function with additional context.
 
-    Useful для добавления метаданных ко всем сообщениям (session_id, user_id и т.д.).
+    Useful for adding metadata to all messages (session_id, user_id etc).
 
     Args:
-        logger: Базовый логгер.
-        **context: Дополнительные поля контекста.
+        logger: Base logger.
+        **context: Additional context fields.
 
     Returns:
-        Функция для логирования с контекстом.
+        Logging function with context.
 
     Example:
         >>> logger = get_logger()
-        >>> log_with_context = create_context_logger(logger, session='SES001', user='admin')
-        >>> log_with_context('INFO', 'Обработка данных')
+        >>> log_ctx = create_context_logger(
+        ...     logger,
+        ...     session='SES001',
+        ...     user='admin',
+        ... )
+        >>> log_ctx('INFO', 'Processing data')
     """
 
-    def log_with_context(level: str, message: str, **extra: str | int | float) -> None:
-        # Объединяем контекст и дополнительные параметры
+    def log_with_context(
+        level: str,
+        message: str,
+        **extra: str | int | float,
+    ) -> None:
+        # Merge context and extra parameters
         full_context = {**context, **extra}
         context_str = ' | '.join(f'{k}={v}' for k, v in full_context.items())
         full_message = f'[{context_str}] {message}'
 
-        # Логируем с учетом уровня
+        # Log with level
         numeric_level = _parse_log_level(level)
         logger.log(numeric_level, full_message)
 
@@ -445,15 +513,15 @@ def configure_module_logger(
     handlers: Sequence[logging.Handler] | None = None,
 ) -> logging.Logger:
     """
-    Настраивает логгер для конкретного модуля.
+    Configure logger for specific module.
 
     Args:
-        module_name: Имя модуля.
-        level: Уровень логирования (опционально).
-        handlers: Список handlers (опционально).
+        module_name: Module name.
+        level: Logging level (optional).
+        handlers: List of handlers (optional).
 
     Returns:
-        Настроенный логгер модуля.
+        Configured module logger.
 
     Example:
         >>> logger = configure_module_logger('database', 'DEBUG')
@@ -474,73 +542,8 @@ def configure_module_logger(
 
 def shutdown_logging() -> None:
     """
-    Корректно завершает работу системы логирования.
+    Properly shutdown logging system.
 
-    Закрывает все handlers и сбрасывает буферы.
+    Closes all handlers and flushes buffers.
     """
     logging.shutdown()
-
-
-# Функция для тестирования модуля
-def _test_module() -> None:
-    """Тестирует модуль логирования."""
-    print('\nТестирование модуля logger.py...')
-    print('=' * 50)
-
-    # Настройка логгера
-    logger = setup_logging(
-        log_level='DEBUG', log_file='test_app.log', console_output=True, mask_sensitive=True
-    )
-
-    # Тестовые сообщения разных уровней
-    logger.debug('Это DEBUG сообщение')
-    logger.info('Это INFO сообщение')
-    logger.warning('Это WARNING сообщение')
-    logger.error('Это ERROR сообщение')
-    logger.critical('Это CRITICAL сообщение')
-
-    # Тест маскирования чувствительных данных
-    logger.info('Подключение с password=secret123 и token=abc456')
-
-    # Тест декоратора времени выполнения
-    @log_execution_time
-    def slow_function() -> str:
-        import time
-
-        time.sleep(0.1)
-        return 'Готово'
-
-    result = slow_function()
-    logger.info(f'Результат функции: {result}')
-
-    # Тест логирования исключения
-    try:
-        1 / 0
-    except ZeroDivisionError:
-        log_exception(logger, 'Тестовое исключение')
-
-    # Тест контекстного логирования
-    context_log = create_context_logger(logger, session='TEST001', user='admin')
-    context_log('INFO', 'Операция выполнена успешно')
-
-    print('\n' + '=' * 50)
-    print('✓ Все тесты пройдены!')
-    print('✓ Логи записаны в файл: test_app.log')
-
-    # Очистка
-    shutdown_logging()
-
-    # Удаляем тестовый файл
-    test_log = Path('test_app.log')
-    if test_log.exists():
-        test_log.unlink()
-        print('✓ Тестовый файл удален')
-
-
-if __name__ == '__main__':
-    match sys.argv:
-        case [_, '--test']:
-            _test_module()
-        case _:
-            print('Использование:')
-            print('  python logger.py --test  # Запустить тесты')

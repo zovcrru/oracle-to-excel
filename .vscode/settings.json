@@ -63,4 +63,6 @@
   "git.showPushSuccessNotification": true,
   "editor.inlayHints.maximumLength": 0,
   "editor.defaultFormatter": "charliermarsh.ruff",
+  "terminal.integrated.shellIntegration.decorationsEnabled": "never",
+  "terminal.integrated.shellIntegration.enabled": false,
 }

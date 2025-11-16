@@ -2,193 +2,194 @@
 
 ## Project Overview
 
-**Oracle to Excel Exporter** — Python 3.14 приложение для экспорта данных из таблицы Oracle `REPORT_EXCEL_SN` в форматированные Excel-файлы с логированием, обработкой ошибок и потоковой обработкой больших объемов данных.
+**Oracle to Excel Exporter** — Python 3.14 приложение для экспорта данных из таблицы Oracle в форматированные Excel-файлы с логированием, обработкой ошибок и потоковой обработкой больших объемов данных.
 
+Во всех перечислениях, после последнего пункта всегда ставь запятую
 ### Architecture
+Проект использует **модульную архитектуру с функциональным подходом** (PEP 649, Python 3.14+):
 
-Проект использует **модульную архитектуру с функциональным подходом**, разделённую на специализированные модули:
+- **`config.py`** ✓ — загрузка и валидация конфигурации из `.env` с TypedDict, pattern matching, маскированием паролей
+- **`logger.py`** ✓ — централизованное логирование с ротацией, фильтрацией чувствительных данных, цветным выводом
+- **`database.py`** (планируется) — пул подключений Oracle с управлением ресурсами
+- **`queries.py`** (планируется) — построение и выполнение SQL запросов с потоком данных
+- **`error_handler.py`** (планируется) — обработка ORA-ошибок, retry с jitter
+- **`transformers.py`** (планируется) — конвертация Oracle типов в Python
+- **`excel_writer.py`** (планируется) — streaming запись в Excel с форматированием
+- **`main.py`** (stub) — точка входа с парсингом аргументов
 
-- **`config.py`** — загрузка и валидация конфигурации из `.env` с маскированием паролей
-- **`logger.py`** — централизованное логирование с ротацией файлов и фильтрацией чувствительных данных
-- **Планируемые модули** (`database.py`, `queries.py`, `error_handler.py`, `transformers.py`, `excel_writer.py`) — реализация в соответствии с `improved_plan.txt`
-
-Ключевая фишка архитектуры: **streaming-обработка** данных через генераторы (не загружать всё в памяти сразу).
+**Ключевая архитектура:** Streaming-обработка данных через генераторы + фильтраторы (не загружать всё в памяти).
 
 ## Key Conventions & Patterns
 
 ### 1. Python 3.14 Features (Modern Syntax)
+Проект **обязательно использует** Python 3.14+ фичи (не просто может, а требует):
 
-Код активно использует новейшие возможности Python 3.14:
-- **Pattern Matching** (`match/case`) для обработки типов и состояний вместо if/elif
-- **Type Parameter Syntax** (`def func[T]()`) для generic функций
-- **ParamSpec** для типизации декораторов
-- **TypedDict** с `NotRequired` для конфигурации
-- **PEP 649** `from __future__ import annotations`
+- **Pattern Matching** (`match/case`) вместо `if/elif` для всех логик
+- **Type Aliases** — `type LogLevel = str | int` (PEP 695)
+- **Generic функции** — Generic типы с ParamSpec для декораторов
+- **TypedDict с NotRequired** — структурированная конфигурация
+- **Deferred annotations** — `from __future__ import annotations` в каждом модуле
 
-**Пример из config.py:**
+**Примеры из кода (config.py):**
 ```python
+# Pattern matching для обработки типов (ОБЯЗАТЕЛЕН вместо if/elif)
 match default_value:
     case int():
         config[param] = _parse_int_param(param, env_value, default_value, logger)
     case str():
         config[param] = env_value if env_value else default_value
+
+# Generic функция с Type Parameter Syntax (Python 3.14)
+def get_config_value(config: ConfigDict, key: str, default=None):
+    return config.get(key, default)
 ```
 
-### 2. Configuration Management
+### 2. Configuration Management Pattern
+**Файл: `config.py`**
 
-**Pattern:** Загрузка конфигурации один раз на старте, валидация, маскирование паролей.
+Конфигурация загружается ровно один раз на старте и имеет 3 этапа:
 
-- Обязательные параметры в `REQUIRED_CONFIG` frozenset
-- Значения по умолчанию в `DEFAULT_CONFIG` (immutable Mapping)
-- Функция `validate_config()` возвращает кортеж `(bool, list[str])` — статус + список ошибок
-- Маскирование чувствительных данных в логах через замену на `***`
-- Восстановление оригинальных значений перед использованием через `restore_sensitive_data()`
+1. **Загрузка из .env** → `load_config(env_file: str = '.env')`
+   - Использует `python-dotenv.load_dotenv()`
+   - Проверяет обязательные параметры (frozenset `REQUIRED_CONFIG`)
+   - Загружает опциональные с значениями по умолчанию (`DEFAULT_CONFIG: Mapping`)
+   - Маскирует пароли автоматически через `_mask_sensitive_data()`
 
-**Рекомендация:** При добавлении новых параметров обновите `ConfigDict` TypedDict, `REQUIRED_CONFIG`, `DEFAULT_CONFIG`.
+2. **Валидация** → `validate_config(config) -> tuple[bool, list[str]]`
+   - Проверяет наличие обязательных параметров
+   - Валидирует диапазоны чисел с pattern matching
+   - Проверяет логическую согласованность (POOL_MIN <= POOL_MAX)
+   - Возвращает кортеж (status, error_list)
 
-### 3. Logging System (Critical!)
+3. **Восстановление секретов** → `restore_sensitive_data(config)`
+   - Восстанавливает оригинальные пароли перед использованием БД
+   - Вызывается ПЕРЕД передачей config в database модуль
 
-**Every module** должен использовать централизованное логирование:
+**Добавление новых параметров:**
+- Обновить `ConfigDict` TypedDict
+- Добавить в `REQUIRED_CONFIG` если обязательный
+- Добавить в `DEFAULT_CONFIG` если опциональный
+- Добавить валидацию в `validate_config()` с pattern matching
+
+### 3. Logging System (CRITICAL!)
+
+**Файл: `logger.py`**
+
+Логирование централизованное и обязательное для всех модулей:
+
 ```python
+# ВСЕГДА используйте get_logger() в каждом модуле
 from logger import get_logger
 logger = get_logger('module_name')  # автоматически добавляет префикс 'oracle_exporter.'
 ```
 
+**Особенности реализации:**
+- Цветной вывод в консоль (ANSI коды) на Linux/macOS
+- Ротирующийся файл лога (10MB максимум, 3 backup файла)
+- Автоматическое маскирование паролей через regex фильтр
+- Pattern matching для конфигурации обработчиков
+
 **Декораторы для логирования:**
-- `@log_execution_time` — логирует время выполнения функции
-- `@log_function_call(log_args=True, log_result=False)` — логирует вызовы функций
-
-**Маскирование паролей:** Система автоматически маскирует пароли, токены и секреты в логах через `_create_sensitive_filter()`.
-
-### 4. Error Handling Strategy
-
-**Структура, которую нужно реализовать в `error_handler.py`:**
-1. Парсинг ORA-кодов из исключений Oracle
-2. Специфичные сообщения об ошибках (ORA-00942, ORA-01017, ORA-12170 и т.д.)
-3. `is_retryable_error()` — определить, временная ошибка или критическая
-4. `retry_with_backoff()` декоратор с экспоненциальной задержкой и jitter
-5. Логирование каждой попытки retry
-
-### 5. Streaming Data Processing
-
-**Для работы с большими датасетами используйте генераторы:**
-
 ```python
-def execute_query_stream(connection, query, params, fetch_size: int) -> Generator:
-    cursor = connection.cursor()
-    cursor.arraysize = fetch_size  # Настройка размера пакета
-    cursor.execute(query, params)
-    
-    metadata = cursor.description
-    while True:
-        rows = cursor.fetchmany(fetch_size)
-        if not rows:
-            break
-        yield (metadata, rows)  # Yield кортежа метаданные + пакет данных
-    cursor.close()
+# Логирует время выполнения функции
+@log_execution_time
+def slow_operation():
+    ...
+
+# Логирует вызовы с аргументами и результатом
+@log_function_call(log_args=True, log_result=False)
+def calculate(x: int, y: int) -> int:
+    return x + y
+
+# Контекстное логирование (добавляет metadata)
+context_log = create_context_logger(logger, session='SES001', user='admin')
+context_log('INFO', 'Operation started')
 ```
 
-**Почему генераторы?**
-- Не загружают всё в памяти
-- Применяют трансформации построчно
-- Позволяют логировать прогресс каждые N строк
+**Маскирование данных работает автоматически:**
+```python
+# Это будет залогировано как 'password=***' и 'token=***'
+logger.info('Connection with password=secret123 and token=abc456')
+```
 
-### 6. Excel Writing Pattern
+### 4. Module Testing Pattern
 
-**Функции в `excel_writer.py` должны следовать порядку:**
-1. `create_workbook()` — новый workbook
-2. `apply_header_formatting()` — заголовки + стили (жирный, синий фон, freeze_panes)
-3. `stream_data_to_excel()` — основной цикл записи пакетами через генератор
-4. `calculate_column_widths()` — анализ первых N строк для ширины
-5. `apply_column_widths()` — применение расчётной ширины
-6. `apply_sheet_settings()` — фильтры, печать, сетка
-7. `create_metadata_sheet()` — отдельный лист с информацией об экспорте
-8. `save_workbook()` — сохранение с обработкой ошибок
-9. `export_with_fallback()` — резервный CSV при критических ошибках
-
-### 7. Type Hints & Documentation
-
-**Все функции обязательно имеют:**
-- Type hints для параметров и return values
-- Docstring в Google style с:
-  - Однострочным описанием
-  - Args (параметры)
-  - Returns (возвращаемое значение)
-  - Raises (исключения)
-  - Example (пример использования)
+Каждый модуль имеет встроенный self-test в конце:
 
 ```python
-def load_config(env_file: str = '.env', *, use_logging: bool = True) -> ConfigDict:
-    """
-    Загружает конфигурацию из .env файла.
-    
-    Args:
-        env_file: Путь к файлу с переменными окружения.
-        use_logging: Использовать ли систему логирования.
-        
-    Returns:
-        Словарь с конфигурацией приложения.
-        
-    Raises:
-        FileNotFoundError: Если .env файл не найден.
-        ValueError: Если отсутствуют обязательные параметры.
-    """
+# В конце каждого модуля
+def _test_module() -> None:
+    """Простой тест модуля."""
+    logger = setup_logging('DEBUG', console_output=True)
+    # ... тесты здесь ...
+
+if __name__ == '__main__':
+    match sys.argv:
+        case [_, '--test']:
+            _test_module()
+        case [_, '--create-example']:  # для config.py
+            create_env_example()
 ```
+
+Запуск: `python -m src.oracle_to_excel.config --test`
 
 ## Development Workflow
 
-### Setup
+### Quick Start
 ```bash
-# Установка зависимостей
+# Установка проекта с зависимостями
 pip install -e .
-pip install -r requirements-dev.txt (создать файл)
+pip install -r requirements-dev.txt
 
-# Конфигурация
-python -m src.oracle_to_excel.config --create-example  # Создаёт .env.example
+# Создание .env файла
+python -m src.oracle_to_excel.config --create-example
 # Отредактируйте .env с вашими учётными данными Oracle
 ```
 
-### Testing
+### Testing & Code Quality
 ```bash
-# Запуск всех тестов с coverage
-pytest -v --cov=src/oracle_to_excel --cov-report=html
-
-# Запуск тестов конкретного модуля
-pytest tests/test_config.py -v
-
-# Тест модуля непосредственно
+# Тест одного модуля (встроенный self-test)
 python -m src.oracle_to_excel.config --test
 python -m src.oracle_to_excel.logger --test
-```
 
-### Code Quality
-```bash
-# Форматирование кода
+# Полное тестирование с coverage
+pytest -v --cov=src/oracle_to_excel --cov-report=html
+
+# Код-стайл и линтинг (ruff вместо flake8)
 ruff format src/ tests/
-
-# Линтинг
 ruff check src/ tests/
 
 # Проверка типов
 mypy src/
 ```
 
-### Running the Exporter
+### Running the App
 ```bash
-# Базовый экспорт
+# Базовый экспорт (когда будет реализовано)
 python -m src.oracle_to_excel.main --table MY_TABLE --ses SES001
 
-# С кастомной конфигурацией и логированием
-python main.py -t MY_TABLE -s SES001 -c .env.prod -l exports.log
+# С кастомным выходным файлом
+python main.py -t MY_TABLE -s SES001 -o exports/custom.xlsx
 
-# С профилированием производительности
-python main.py -t MY_TABLE -s SES001 --profile
+# С логированием в файл
+python main.py -t MY_TABLE -s SES001 -l exports.log
 ```
 
 ## Critical Implementation Details
 
-### Connection Pool (database.py)
+### Actual Code Patterns (from config.py & logger.py)
 
+**Обработка исключений с Pattern Matching (Python 3.14):**
+```python
+# Вместо try-except используйте match где возможно
+match env_path.exists():
+    case True:
+        load_dotenv(env_path)
+    case False:
+        raise FileNotFoundError(f"Файл не найден: {env_path}")
+```
+
+**Connection Pool (когда реализуете database.py):**
 ```python
 def create_connection_pool(config: dict) -> oracledb.ConnectionPool:
     """Create pool with min/max from config."""
@@ -203,41 +204,43 @@ def create_connection_pool(config: dict) -> oracledb.ConnectionPool:
     )
 ```
 
-**Must-have параметры:**
-- `getmode=POOL_GETMODE_WAIT` — ждать свободное соединение вместо ошибки
-- `read_only=True` — для безопасности при получении подключения
-- `cursor.arraysize = FETCH_ARRAY_SIZE` из конфигурации для оптимизации
-
-### Data Transformation (transformers.py)
-
-Oracle возвращает специфичные типы данные, которые надо конвертировать:
+**Data Transformation (transformers.py):**
+Oracle типы требуют конвертации:
 - `oracledb.LOB` → строка `.read()`
 - `decimal.Decimal` → float/int
-- `datetime` → остаётся как есть
+- `datetime.datetime` → остаётся как есть
 - `bytes` → `.decode('utf-8')`
-- `None` → `None` (пустые ячейки Excel)
+- `None` → остаётся None
 
-Обработка ошибок конвертации должна логироваться, но не падать процесс.
-
-### Main Entry Point (main.py)
-
+**Streaming Excel Writing:**
+Используйте генераторы для больших датасетов:
 ```python
-def main() -> int:
-    """
-    Returns: 0 (успех) или 1 (ошибка)
-    """
+def execute_query_stream(connection, query, params, fetch_size: int):
+    cursor = connection.cursor()
+    cursor.arraysize = fetch_size  # из конфига
+    cursor.execute(query, params)
+    
+    metadata = cursor.description
+    while True:
+        rows = cursor.fetchmany(fetch_size)
+        if not rows:
+            break
+        yield (metadata, rows)
+    cursor.close()
 ```
 
-**Обязательная последовательность:**
-1. Parse arguments
-2. Load & validate config
-3. Setup logging
-4. Test DB connection
-5. Create connection pool
-6. Generate output filename
-7. Call export function
-8. Close pool gracefully
-9. Return exit code
+**Main Entry Point (main.py) должен возвращать exit code:**
+```python
+def main() -> int:
+    """Returns: 0 (success) or 1 (error)."""
+    # 1. Parse arguments
+    # 2. Load & validate config
+    # 3. Setup logging
+    # 4. Test DB connection
+    # 5. Create connection pool
+    # 6. Call export function
+    # 7. Close pool gracefully
+    return 0  # or 1 on error
 ```
 
 ## Project Structure
@@ -256,23 +259,18 @@ src/oracle_to_excel/
 
 tests/
   __init__.py
-  conftest.py         (фикстуры pytest)
-  test_config.py
-  test_database.py
-  test_queries.py
-  test_error_handler.py
-  test_transformers.py
-  test_excel_writer.py
-  test_integration.py
 
 .github/
-  copilot-instructions.md ← Вы здесь
+  copilot-instructions.md
+
+pyproject.toml        - конфигурация проекта, зависимости, pytest, ruff, mypy
+requirements-dev.txt  - зависимости для разработки (создать при необходимости)
 ```
 
 ## Important Notes
 
 1. **Паттерн match/case должен быть везде** — это стиль проекта (Python 3.14), не if/elif
-2. **Все модули тестируемы** — используйте `if __name__ == '__main__'` блоки для selbat-test
+2. **Все модули тестируемы** — используйте `if __name__ == '__main__'` блоки для self-test
 3. **Логирование важно** — не используйте print(), всегда logger
 4. **Type hints обязательны** — проект использует mypy
 5. **Docstrings для всех функций** — Google style format

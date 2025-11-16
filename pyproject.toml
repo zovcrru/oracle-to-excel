@@ -31,21 +31,13 @@ docs = [
     "tomli>=2.2.0,<3.0.0",
     "doc8>=1.1.0,<2.0.0",
 ]
+
 [project.scripts]
 oracle-to-excel = "oracle_to_excel:main"
-
-[tool.uv]
-dev-dependencies = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.uv.sources]
-oracle-to-excel = { path = "src/oracle_to_excel" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -54,12 +46,15 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--verbose --cov=src/oracle_to_excel --cov-report=html"
 
+[tool.ruff]
+line-length = 100
+
 [tool.ruff.lint]
 select = [
     "A",    # flake8-builtins
     "B",    # flake8-bugbear
     "C4",   # flake8-comprehensions
-    "C90",  # maccabe
+    "C90",  # mccabe (McCabe complexity)
     "COM",  # flake8-commas
     "D",    # pydocstyle
     "DTZ",  # flake8-datetimez
@@ -106,7 +101,7 @@ ignore = [
     "D401",
     "D404",
     "D405",
-    "E501",    # Avoid enforcing line-length violations (`E501`)
+    #"E501",    # Avoid enforcing line-length violations (`E501`)
     "ISC001",  # implicit string concat conflicts with `ruff format`
     "ISC003",  # prefer explicit string concat over implicit concat
     "PLR09",   # we have our own complexity rules
@@ -117,10 +112,10 @@ ignore = [
 ]
 external = ["WPS"]
 unfixable = ["B"]
-allowed-confusables = ["с", "р", "о"]
+allowed-confusables = ["с", "е","р", "о", "б"]
 
-flake8-import-conventions.banned-from = ["ast"]
-flake8-quotes.inline-quotes = "double"
+#flake8-import-conventions.banned-from = ["ast"]
+flake8-quotes.inline-quotes = "single"
 mccabe.max-complexity = 6
 pydocstyle.convention = "google"
 
@@ -136,4 +131,23 @@ pydocstyle.convention = "google"
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
-docstring-code-format = false
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = true
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pytest>=9.0.1",
+]
