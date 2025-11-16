@@ -1,0 +1,66 @@
+{
+  "window.zoomLevel": 1,
+  "editor.minimap.enabled": false,
+  "git.supportCancellation": true,
+  "git.autofetch": true,
+  "ipynb.pasteImagesAsAttachments.enabled": false,
+  "editor.fontSize": 16,
+  "editor.codeActionsOnSave": {
+    "onFocusChange": "explicit",
+    "source.organizeImports.ruff": "always"
+  },
+  "tabnine.experimentalAutoImports": true,
+  "tabnine.receiveBetaChannelUpdates": true,
+  "files.associations": {
+    "*.py": "python"
+  },
+  "files.autoSave": "onFocusChange",
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+  },
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell"
+    },
+    "Command Prompt": {
+      "path": [
+        "${env:windir}\\Sysnative\\cmd.exe",
+        "${env:windir}\\System32\\cmd.exe"
+      ],
+      "args": [],
+      "icon": "terminal-cmd"
+    },
+    "cmder": {
+      "path": [
+        "${env:windir}\\System32\\cmd.exe"
+      ],
+      "args": [
+        "/k C:\\Utils\\System\\cmder\\vendor\\init.bat"
+      ],
+      "icon": "terminal-cmd",
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "cmder",
+  "terminal.integrated.copyOnSelection": true,
+  "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+  "terminal.integrated.confirmOnExit": "hasChildProcesses",
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.terminal.executeInFileDir": true,
+  "python.defaultInterpreterPath": "",
+  "python.createEnvironment.trigger": "prompt",
+  "python.languageServer": "Pylance",
+  "python.testing.pytestEnabled": true,
+  "git.inputValidationLength": 100,
+  "git.inputValidationSubjectLength": null,
+  "git.mergeEditor": true,
+  "python.testing.pytestPath": ".venv\\Scripts\\py.test.exe",
+  "workbench.iconTheme": "Monokai Pro Icons",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.typeCheckingMode": "basic",
+  "flake8.importStrategy": "fromEnvironment",
+  "git.showPushSuccessNotification": true,
+  "editor.inlayHints.maximumLength": 0,
+  "editor.defaultFormatter": "charliermarsh.ruff",
+}

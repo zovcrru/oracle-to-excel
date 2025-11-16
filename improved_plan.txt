@@ -1,0 +1,491 @@
+## Улучшенный план программы экспорта данных Oracle в Excel (Python 3.14)
+
+### Структура программы (функциональный подход)
+
+---
+
+#### **Модуль 1: Конфигурация и валидация (`config.py`)**
+
+**Функция `load_config(env_file: str = '.env') -> dict`**
+- Загрузка переменных из .env файла через `python-dotenv`
+- Валидация обязательных параметров из списка `REQUIRED_CONFIG`
+- Установка значений по умолчанию для опциональных параметров
+- Маскирование паролей в логах (замена на `***`)
+- Возврат словаря с конфигурацией или выброс исключения при отсутствии обязательных параметров
+
+```python
+REQUIRED_CONFIG = ['ORACLE_USER', 'ORACLE_PASSWORD', 'ORACLE_DSN']
+OPTIONAL_CONFIG = {
+    'POOL_MIN': 2,
+    'POOL_MAX': 5,
+    'POOL_INCREMENT': 1,
+    'LOG_LEVEL': 'INFO',
+    'OUTPUT_DIR': './exports',
+    'FETCH_ARRAY_SIZE': 1000,
+    'CHUNK_SIZE': 5000,
+    'QUERY_TIMEOUT': 300,
+    'MAX_COLUMN_WIDTH': 50,
+    'COLUMN_WIDTH_SAMPLE_SIZE': 1000
+}
+```
+
+**Функция `validate_config(config: dict) -> bool`**
+- Проверка корректности значений (числовые параметры > 0, директории существуют)
+- Проверка доступности OUTPUT_DIR для записи
+- Валидация LOG_LEVEL из допустимых значений
+
+---
+
+#### **Модуль 2: Система логирования (`logger.py`)**
+
+**Функция `setup_logging(log_level: str, log_file: str = None) -> logging.Logger`**
+- Создание логгера с именем 'oracle_exporter'
+- Настройка форматтера: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+- Добавление StreamHandler для вывода в консоль
+- Опциональный RotatingFileHandler для записи в файл (max 10MB, 3 backup)
+- Фильтрация чувствительных данных в логах
+
+**Функция `log_execution_time(func: Callable) -> Callable`**
+- Декоратор для логирования времени выполнения функций
+- Запись начала и окончания операции
+- Логирование затраченного времени в секундах
+
+---
+
+#### **Модуль 3: Управление подключениями к БД (`database.py`)**
+
+**Функция `create_connection_pool(config: dict) -> oracledb.ConnectionPool`**
+- Создание пула подключений через `oracledb.create_pool()`
+- Параметры: min, max, increment из конфигурации
+- Установка `getmode=oracledb.POOL_GETMODE_WAIT` для ожидания свободного соединения
+- Возврат объекта пула или выброс исключения при ошибке подключения
+
+**Функция `get_connection(pool: oracledb.ConnectionPool) -> oracledb.Connection`**
+- Получение подключения из пула
+- Установка `read_only=True` для безопасности
+- Настройка `autocommit=False` (не требуется commit для SELECT)
+- Возврат объекта подключения
+
+**Функция `close_pool(pool: oracledb.ConnectionPool) -> None`**
+- Корректное закрытие всех подключений в пуле
+- Логирование процесса закрытия
+- Обработка возможных исключений при закрытии
+
+**Функция `test_connection(config: dict) -> bool`**
+- Проверка подключения к БД перед основной работой
+- Выполнение простого запроса `SELECT 1 FROM DUAL`
+- Возврат True при успехе или False при ошибке
+
+---
+
+#### **Модуль 4: Работа с запросами (`queries.py`)**
+
+**Функция `build_query(table: str, ses: str) -> str`**
+- Построение параметризованного SQL-запроса
+- Использование bind-переменных для защиты от SQL-injection
+- Добавление ORDER BY для детерминированной сортировки
+- Возврат строки SQL-запроса
+
+```python
+def build_query(table: str, ses: str) -> str:
+    query = f"""
+        SELECT NUM, SES, SCH, DV, VP, SUMO, SUMK, SUMD
+        FROM {table}
+        WHERE SES = :ses
+        ORDER BY NUM, DV
+    """
+    return query
+```
+
+**Функция `execute_query_stream(connection: oracledb.Connection, query: str, params: dict, fetch_size: int) -> Generator`**
+- Создание курсора с параметром `arraysize=fetch_size`
+- Выполнение запроса с bind-переменными
+- Генератор для пакетной выборки данных через `fetchmany()`
+- Кэширование `cursor.description` для метаданных
+- Yield кортежей (metadata, data_chunk) для streaming-обработки
+- Корректное закрытие курсора в блоке finally
+
+**Функция `cache_table_metadata(cursor: oracledb.Cursor) -> list`**
+- Извлечение метаданных из `cursor.description`
+- Создание списка словарей с информацией о колонках
+- Возврат структурированных метаданных для переиспользования
+
+---
+
+#### **Модуль 5: Обработка ошибок Oracle (`error_handler.py`)**
+
+**Функция `handle_oracle_error(error: Exception) -> str`**
+- Парсинг ORA-кодов из исключения
+- Маппинг специфичных ошибок на понятные сообщения:
+  - ORA-00942: "Таблица или представление не существует"
+  - ORA-01017: "Неверное имя пользователя или пароль"
+  - ORA-12170: "Превышено время ожидания подключения"
+  - ORA-03113: "Потеря соединения с сервером"
+  - ORA-01013: "Запрос был прерван (timeout)"
+- Возврат форматированного сообщения об ошибке
+
+**Функция `retry_with_backoff(func: Callable, max_retries: int = 3, base_delay: float = 1.0) -> Callable`**
+- Декоратор для повторных попыток при временных ошибках
+- Экспоненциальная задержка: delay = base_delay * (2 ** attempt)
+- Добавление случайного jitter: delay += random.uniform(0, 0.1 * delay)
+- Логирование каждой попытки
+- Проброс исключения после исчерпания попыток
+
+**Функция `is_retryable_error(error: Exception) -> bool`**
+- Определение, является ли ошибка временной (можно повторить)
+- Проверка ORA-кодов: 03113, 03114, 12170, 12571, 01089
+- Возврат True для временных сетевых/ресурсных ошибок
+
+---
+
+#### **Модуль 6: Преобразование данных (`transformers.py`)**
+
+**Функция `convert_oracle_types(row: tuple, metadata: list) -> list`**
+- Конвертация Oracle-специфичных типов в Python-типы
+- Обработка:
+  - `oracledb.LOB` -> строка через `.read()`
+  - `datetime.datetime` -> datetime (без изменений)
+  - `decimal.Decimal` -> float или int (в зависимости от точности)
+  - `None` -> None (пустые ячейки Excel)
+  - `bytes` -> строка через `.decode('utf-8')`
+- Обработка ошибок конвертации с логированием
+- Возврат списка конвертированных значений
+
+**Функция `validate_data_integrity(data: list, metadata: list) -> tuple[bool, list]`**
+- Проверка обязательных полей (NUM, SES не должны быть NULL)
+- Детекция аномалий в данных:
+  - Проверка типов данных соответствуют ожиданиям
+  - Логирование строк с проблемами
+- Возврат кортежа (is_valid: bool, error_messages: list)
+
+**Функция `prepare_header_row(metadata: list) -> list`**
+- Извлечение имен колонок из метаданных
+- Нормализация имен (uppercase, замена символов)
+- Возврат списка заголовков
+
+---
+
+#### **Модуль 7: Создание Excel-файлов (`excel_writer.py`)**
+
+**Функция `create_workbook() -> openpyxl.Workbook`**
+- Создание нового Workbook
+- Получение активного листа
+- Установка базовых настроек листа
+- Возврат объекта workbook
+
+**Функция `apply_header_formatting(worksheet: Worksheet, header_row: list) -> None`**
+- Запись заголовков в первую строку
+- Применение стилей:
+  - Жирный шрифт (bold=True)
+  - Фон (#4472C4 - синий)
+  - Белый цвет текста
+  - Выравнивание по центру
+  - Границы ячеек
+- Закрепление первой строки через `freeze_panes`
+
+**Функция `write_data_batch(worksheet: Worksheet, data_batch: list, start_row: int) -> int`**
+- Запись пакета данных начиная со строки start_row
+- Использование `worksheet.append()` для эффективной записи
+- Применение базового форматирования к данным (выравнивание, границы)
+- Возврат номера последней записанной строки
+
+**Функция `calculate_column_widths(worksheet: Worksheet, max_width: int, sample_size: int) -> dict`**
+- Анализ первых sample_size строк для определения ширины
+- Вычисление максимальной длины значений в каждой колонке
+- Ограничение максимальной ширины параметром max_width
+- Добавление небольшого отступа (+2 символа)
+- Возврат словаря {column_letter: width}
+
+**Функция `apply_column_widths(worksheet: Worksheet, widths: dict) -> None`**
+- Применение рассчитанных ширин к колонкам
+- Итерация по словарю widths
+- Установка `worksheet.column_dimensions[column].width`
+
+**Функция `apply_sheet_settings(worksheet: Worksheet) -> None`**
+- Включение фильтров для всех данных
+- Настройка печати (ориентация, масштаб)
+- Установка видимости линий сетки
+- Настройка повторяющихся заголовков при печати
+
+**Функция `create_metadata_sheet(workbook: Workbook, export_info: dict) -> None`**
+- Создание нового листа "Metadata"
+- Запись информации об экспорте:
+  - Дата и время экспорта
+  - Версия программы
+  - Параметры запроса (таблица, сессия)
+  - Количество записей
+  - Время выполнения
+  - Версия Python и библиотек
+- Форматирование метаданных (жирные ключи, выравнивание)
+
+**Функция `stream_data_to_excel(workbook: Workbook, worksheet: Worksheet, data_generator: Generator, metadata: list, config: dict) -> int`**
+- Главная функция для streaming-записи данных
+- Запись заголовков через `apply_header_formatting()`
+- Итерация по пакетам данных из генератора
+- Конвертация типов для каждого пакета
+- Запись пакетов через `write_data_batch()`
+- Периодическое логирование прогресса (каждые 10000 строк)
+- Расчет и применение ширины колонок после записи данных
+- Применение настроек листа
+- Возврат общего количества записанных строк
+
+**Функция `save_workbook(workbook: Workbook, filepath: str) -> None`**
+- Сохранение workbook в файл
+- Обработка ошибок записи (нет прав, диск заполнен)
+- Логирование успешного сохранения
+- Возврат размера файла в MB для логирования
+
+**Функция `export_with_fallback(data_generator: Generator, filepath: str, metadata: list) -> bool`**
+- Резервная функция при критических ошибках openpyxl
+- Экспорт в простой CSV формат через модуль `csv`
+- Запись заголовков и данных построчно
+- Возврат True при успехе, False при ошибке
+
+---
+
+#### **Модуль 8: Основная логика (`main.py`)**
+
+**Функция `parse_arguments() -> argparse.Namespace`**
+- Создание парсера аргументов командной строки
+- Обязательные аргументы:
+  - `--table` / `-t`: имя таблицы Oracle
+  - `--ses` / `-s`: значение сессии для фильтрации
+- Опциональные аргументы:
+  - `--output` / `-o`: путь к выходному файлу
+  - `--config` / `-c`: путь к .env файлу
+  - `--log-file` / `-l`: путь к файлу логов
+  - `--profile`: флаг для включения профилирования
+- Возврат объекта с параметрами
+
+**Функция `generate_output_filename(table: str, ses: str, output_dir: str) -> str`**
+- Генерация имени файла формата: `{table}_{ses}_{timestamp}.xlsx`
+- Создание полного пути с OUTPUT_DIR
+- Проверка существования директории, создание при необходимости
+- Возврат полного пути к файлу
+
+**Функция `profile_execution(func: Callable) -> Callable`**
+- Декоратор для профилирования производительности
+- Использование `cProfile.Profile()`
+- Сохранение результатов в файл .prof
+- Вывод статистики в лог (топ-20 функций по времени)
+- Условная активация через флаг --profile
+
+**Функция `export_to_excel(table: str, ses: str, output_file: str, config: dict, pool: oracledb.ConnectionPool) -> bool`**
+- Главная функция экспорта с применением всех модулей
+- Получение подключения из пула
+- Построение SQL-запроса
+- Создание генератора данных через `execute_query_stream()`
+- Создание workbook и worksheet
+- Запуск streaming-записи данных
+- Создание листа с метаданными
+- Сохранение файла
+- Обработка ошибок с retry-логикой
+- Возврат True при успехе, False при ошибке
+- Корректное закрытие ресурсов в блоке finally
+
+**Функция `main() -> int`**
+- Точка входа в программу
+- Парсинг аргументов командной строки
+- Загрузка и валидация конфигурации
+- Настройка логирования
+- Тестирование подключения к БД
+- Создание пула подключений
+- Генерация имени выходного файла (если не указан)
+- Вызов функции экспорта
+- Корректное закрытие пула
+- Логирование итоговой статистики
+- Возврат exit-кода (0 - успех, 1 - ошибка)
+
+---
+
+#### **Модуль 9: Тестирование (`tests/`)**
+
+**test_config.py**
+- `test_load_config_valid()`: проверка загрузки корректной конфигурации
+- `test_load_config_missing_required()`: проверка исключения при отсутствии обязательных параметров
+- `test_validate_config_invalid_values()`: проверка валидации некорректных значений
+- `test_config_password_masking()`: проверка маскирования паролей в логах
+
+**test_database.py**
+- `test_create_connection_pool()`: проверка создания пула (с mock)
+- `test_get_connection_readonly()`: проверка параметров подключения
+- `test_connection_pool_exhaustion()`: тест поведения при исчерпании пула
+- `test_test_connection_success()`: проверка успешного тестового подключения
+
+**test_queries.py**
+- `test_build_query()`: проверка корректности SQL-запроса
+- `test_execute_query_stream()`: тест streaming-выборки с mock курсором
+- `test_cache_table_metadata()`: проверка кэширования метаданных
+
+**test_error_handler.py**
+- `test_handle_oracle_error_specific()`: проверка обработки специфичных ORA-кодов
+- `test_retry_with_backoff_success()`: тест успешного retry
+- `test_retry_with_backoff_exhausted()`: тест исчерпания попыток
+- `test_is_retryable_error()`: проверка определения временных ошибок
+
+**test_transformers.py**
+- `test_convert_oracle_types()`: проверка конвертации всех типов
+- `test_validate_data_integrity()`: тест валидации данных
+- `test_prepare_header_row()`: проверка подготовки заголовков
+
+**test_excel_writer.py**
+- `test_create_workbook()`: проверка создания workbook
+- `test_apply_header_formatting()`: тест форматирования заголовков
+- `test_write_data_batch()`: проверка записи данных
+- `test_calculate_column_widths()`: тест расчета ширины
+- `test_stream_data_to_excel()`: интеграционный тест полной записи
+- `test_export_with_fallback()`: проверка резервного экспорта в CSV
+
+**test_integration.py**
+- Интеграционные тесты с тестовой БД или Docker-контейнером
+- Тесты полного цикла экспорта с различными размерами данных
+- Тесты обработки ошибок подключения
+
+**conftest.py**
+- Фикстуры pytest для создания mock-объектов
+- Фикстура для временных файлов и директорий
+- Фикстура для тестовой конфигурации
+
+---
+
+#### **Модуль 10: Документация**
+
+**README.md**
+- Описание программы и функциональности
+- Требования к окружению (Python 3.14, Oracle Instant Client)
+- Инструкции по установке зависимостей
+- Примеры использования с различными параметрами
+- Описание структуры .env файла
+- Диаграмма архитектуры (ASCII или ссылка на изображение)
+- FAQ по типичным ошибкам и их решению
+- Инструкции по запуску тестов
+
+**Docstrings для всех функций (Google style)**
+Пример документации функции с полным описанием аргументов, возвращаемых значений, исключений и примеров использования.
+
+---
+
+### Зависимости (requirements.txt)
+
+```
+oracledb>=2.0.0
+openpyxl>=3.1.0
+python-dotenv>=1.0.0
+```
+
+### Зависимости для разработки (requirements-dev.txt)
+
+```
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+black>=24.0.0
+flake8>=7.0.0
+mypy>=1.8.0
+```
+
+---
+
+### Структура файлов проекта
+
+```
+oracle_excel_exporter/
+│
+├── config.py                    # Модуль конфигурации
+├── logger.py                    # Система логирования
+├── database.py                  # Управление подключениями
+├── queries.py                   # Работа с запросами
+├── error_handler.py            # Обработка ошибок Oracle
+├── transformers.py             # Преобразование данных
+├── excel_writer.py             # Создание Excel-файлов
+├── main.py                     # Основная логика и точка входа
+│
+├── tests/                      # Директория тестов
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_config.py
+│   ├── test_database.py
+│   ├── test_queries.py
+│   ├── test_error_handler.py
+│   ├── test_transformers.py
+│   ├── test_excel_writer.py
+│   └── test_integration.py
+│
+├── .env.example                # Пример файла конфигурации
+├── requirements.txt            # Зависимости проекта
+├── requirements-dev.txt        # Зависимости для разработки
+├── README.md                   # Документация
+└── .gitignore                  # Исключения для git
+```
+
+---
+
+### Пример .env файла
+
+```env
+# Oracle Database Connection
+ORACLE_USER=your_username
+ORACLE_PASSWORD=your_password
+ORACLE_DSN=localhost:1521/ORCL
+
+# Connection Pool Settings
+POOL_MIN=2
+POOL_MAX=5
+POOL_INCREMENT=1
+
+# Query Settings
+FETCH_ARRAY_SIZE=1000
+CHUNK_SIZE=5000
+QUERY_TIMEOUT=300
+
+# Excel Settings
+MAX_COLUMN_WIDTH=50
+COLUMN_WIDTH_SAMPLE_SIZE=1000
+
+# Output Settings
+OUTPUT_DIR=./exports
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+---
+
+### Примеры использования
+
+**Базовый экспорт:**
+```bash
+python main.py --table MY_TABLE --ses SES001
+```
+
+**С указанием выходного файла:**
+```bash
+python main.py -t MY_TABLE -s SES001 -o /path/to/output.xlsx
+```
+
+**С кастомной конфигурацией и логированием:**
+```bash
+python main.py -t MY_TABLE -s SES001 -c custom.env -l export.log
+```
+
+**С профилированием производительности:**
+```bash
+python main.py -t MY_TABLE -s SES001 --profile
+```
+
+---
+
+### Ключевые улучшения в новом плане
+
+1. **Connection Pool**: Полноценная реализация пула подключений для масштабируемости
+2. **Streaming обработка**: Генератор данных с `fetchmany()` для эффективной работы с большими датасетами
+3. **Модульная архитектура Excel**: Разделение ответственности на отдельные функции
+4. **Расширенная обработка ошибок**: Специфичные обработчики ORA-кодов с retry и jitter
+5. **Оптимизация производительности**: Расчет ширины колонок на sample, настройка arraysize
+6. **Метаданные экспорта**: Отдельный лист с информацией о процессе экспорта
+7. **Валидация данных**: Проверка integrity данных перед экспортом
+8. **Graceful degradation**: Резервный экспорт в CSV при критических ошибках
+9. **Комплексное тестирование**: Unit и integration тесты для всех модулей
+10. **Профилирование**: Опциональный анализ производительности
+11. **Read-only подключения**: Безопасность через read-only режим и параметризованные запросы
+12. **Полная документация**: Docstrings, README, примеры использования
