@@ -112,7 +112,7 @@ ignore = [
 ]
 external = ["WPS"]
 unfixable = ["B"]
-allowed-confusables = ["с", "е","р", "о", "б"]
+allowed-confusables = ["Н", "с", "е","р", "о", "б"]
 
 #flake8-import-conventions.banned-from = ["ast"]
 flake8-quotes.inline-quotes = "single"

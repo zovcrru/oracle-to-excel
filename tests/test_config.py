@@ -19,6 +19,7 @@ from oracle_to_excel.config import (
 from oracle_to_excel.logger import setup_logging
 
 
+
 def test_load_config_success() -> None:
     """Тест успешной загрузки конфигурации."""
     logger = setup_logging('DEBUG', console_output=True)
@@ -125,3 +126,5 @@ def test_create_env_example() -> None:
     finally:
         if output_file.exists():
             output_file.unlink()
+
+

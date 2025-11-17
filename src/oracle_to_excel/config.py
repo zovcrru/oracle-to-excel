@@ -3,40 +3,37 @@
 
 Загружает и валидирует параметры из .env файла,
 используя возможности Python 3.14 и централизованное логирование.
+Поддерживает Oracle и PostgreSQL через connection strings.
 """
 
-# PEP 649: Deferred evaluation annotations - новая фича Python 3.14
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import NotRequired, TypedDict
-from xmlrpc.client import Boolean
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    import logging
+
+from oracle_to_excel.logger import get_logger
 
 try:
     from dotenv import load_dotenv
 except ImportError:
-    # Когда dotenv нет, используем print
-    print('Ошибка: требуется python-dotenv')
+    print('Ошибка: требуется установить python-dotenv')
     print('Выполните: pip install python-dotenv')
     sys.exit(1)
 
-from oracle_to_excel.logger import get_logger
 
-
-# Определение типов конфигурации с использованием TypedDict
 class ConfigDict(TypedDict):
     """Структура конфигурации приложения."""
 
-    # Обязательные параметры
+    DB_TYPE: str
     DB_CONNECT_URI: str
-
-    # Опциональные параметры (NotRequired из Python 3.11+)
     LOG_LEVEL: NotRequired[str]
-    LOG_FILE: NotRequired[str]
     OUTPUT_DIR: NotRequired[str]
     FETCH_ARRAY_SIZE: NotRequired[int]
     CHUNK_SIZE: NotRequired[int]
@@ -45,61 +42,30 @@ class ConfigDict(TypedDict):
     COLUMN_WIDTH_SAMPLE_SIZE: NotRequired[int]
 
 
-# Константы для валидации
-# REQUIRED_CONFIG: frozenset[str] = frozenset(
-#     {
-#         'ORACLE_USER',
-#         'ORACLE_PASSWORD',
-#         'ORACLE_DSN',
-#     }
-# )
+REQUIRED_CONFIG: frozenset[str] = frozenset({'DB_TYPE', 'DB_CONNECT_URI'})
 
-REQUIRED_CONFIG: frozenset[str] = frozenset(
-    {
-        'DB_CONNECT_URI',
-    }
-)
-
-# Значения по умолчанию с использованием frozendict (immutable)
-DEFAULT_CONFIG: Mapping[str, int | str | Boolean] = {
+DEFAULT_CONFIG: Mapping[str, int | str] = {
     'LOG_LEVEL': 'INFO',
-    'LOG_FILE': './logs/oracle_export.log',
     'OUTPUT_DIR': './exports',
     'FETCH_ARRAY_SIZE': 1000,
     'CHUNK_SIZE': 5000,
     'QUERY_TIMEOUT': 300,
     'MAX_COLUMN_WIDTH': 50,
-    'ENABLE_BATCH_PROCESSING': True,
-    'BATCH_SIZE': 50000,
-    'SHOW_PROGRESS_BAR': True,
-    'PROGRESS_UPDATE_INTERVAL': 100,
+    'COLUMN_WIDTH_SAMPLE_SIZE': 1000,
 }
 
-VALID_LOG_LEVELS: frozenset[str] = frozenset(
-    {
-        'DEBUG',
-        'INFO',
-        'WARNING',
-        'ERROR',
-        'CRITICAL',
-    }
-)
+VALID_LOG_LEVELS: frozenset[str] = frozenset({'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'})
+
+VALID_DB_TYPES: frozenset[str] = frozenset({'oracle', 'postgresql'})
 
 
-def load_config(  # noqa: C901
-    env_file: str = '.env',
-    *,
-    use_logging: bool = True,
-) -> ConfigDict:
+def load_config(env_file: str = '.env', *, use_logging: bool = True) -> ConfigDict:
     """
     Загружает конфигурацию из .env файла.
 
-    Использует pattern matching (улучшенный в Python 3.14) для обработки
-    различных сценариев загрузки файла.
-
     Args:
         env_file: Путь к файлу с переменными окружения.
-        use_logging: Использовать ли систему логирования (False для bootstrap).
+        use_logging: Использовать ли систему логирования.
 
     Returns:
         Словарь с конфигурацией приложения.
@@ -107,231 +73,264 @@ def load_config(  # noqa: C901
     Raises:
         FileNotFoundError: Если .env файл не найден.
         ValueError: Если отсутствуют обязательные параметры.
-
-    Example:
-        >>> config = load_config('.env')
-        >>> print(config['ORACLE_USER'])
-        'admin'
     """
-    # Получаем логгер (или None если логирование еще не настроено)
-    logger = get_logger() if use_logging else None
+    logger = get_logger('config') if use_logging else None
     env_path = Path(env_file)
 
-    # Pattern matching для проверки существования файла (Python 3.10+)
-    match env_path.exists():
-        case True:
-            load_dotenv(env_path)
-            if logger:
-                logger.info(
-                    'Конфигурация загружена из: %s',
-                    env_path.absolute(),
-                )
-        case False:
-            error_msg = (
-                f'Файл конфигурации не найден: {env_path.absolute()}\n'
-                f'Создайте .env файл на основе .env.example'
-            )
-            if logger:
-                logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+    if not env_path.exists():
+        error_msg = (
+            f'Файл конфигурации не найден: {env_path.absolute()}'
+            'Создайте .env файл на основе .env.example'
+        )
+        if logger:
+            logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
 
-    # Загружаем все переменные
-    config: dict[str, str | int | bool] = {}
+    load_dotenv(env_path)
+    if logger:
+        logger.info('Конфигурация загружена из: %s', env_path.absolute())
 
-    # Загружаем обязательные параметры
+    config = _load_required_params(logger)
+    _load_optional_params(config, logger)
+    _mask_sensitive_data(config, logger)
+
+    if logger:
+        logger.info('Конфигурация успешно загружена (%d параметров)', len(config))
+
+    return cast(ConfigDict, config)
+
+
+def _load_required_params(logger: logging.Logger | None) -> dict[str, Any]:
+    """Загружает обязательные параметры из окружения."""
+    config: dict[str, Any] = {}
     missing_params = []
+
     for param in REQUIRED_CONFIG:
         value = os.getenv(param)
-        match value:
-            case None | '':
-                missing_params.append(param)
-            case str() as val:
-                config[param] = val
+        if value:
+            config[param] = value
+        else:
+            missing_params.append(param)
 
-    # Проверка на отсутствующие обязательные параметры
     if missing_params:
         error_msg = (
-            f'Отсутствуют обязательные параметры в .env файле:\n'
-            f'{", ".join(missing_params)}\n'
-            f'Убедитесь, что все обязательные параметры заданы.'
+            f'Отсутствуют обязательные параметры в .env файле:'
+            f'{", ".join(missing_params)}'
+            'Убедитесь, что все обязательные параметры заданы.'
         )
         if logger:
             logger.error(error_msg)
         raise ValueError(error_msg)
 
-    # Загружаем опциональные параметры с значениями по умолчанию
+    return config
+
+
+def _load_optional_params(config: dict[str, Any], logger: logging.Logger | None) -> None:
+    """Загружает опциональные параметры с значениями по умолчанию."""
     for param, default_value in DEFAULT_CONFIG.items():
         env_value = os.getenv(param)
 
-        # Pattern matching для обработки типов (Python 3.14)
-        match default_value:
-            case int():
-                config[param] = _parse_int_param(
-                    param,
-                    env_value,
-                    default_value,
-                    logger,
-                )
-            case str():
-                config[param] = env_value if env_value else default_value
-
-    # Маскируем пароль для безопасного логирования
-    _mask_sensitive_data(config, logger)
-
-    if logger:
-        logger.info(
-            'Конфигурация загружена (%d параметров)',
-            len(config),
-        )
-
-    return config  # type: ignore[return-value]
+        if isinstance(default_value, int):
+            config[param] = _parse_int_param(param, env_value, default_value, logger)
+        else:
+            config[param] = env_value if env_value else default_value
 
 
-def _parse_int_param(  # noqa: C901
-    param_name: str,
-    value: str | None,
-    default: int,
-    logger: logging.Logger | None = None,
+def _parse_int_param(
+    param_name: str, value: str | None, default: int, logger: logging.Logger | None = None
 ) -> int:
-    """
-    Парсит целочисленный параметр из строки.
-
-    Использует улучшенную обработку исключений Python 3.14
-    (PEP 758 - except без скобок).
-
-    Args:
-        param_name: Имя параметра для сообщений об ошибках.
-        value: Строковое значение параметра.
-        default: Значение по умолчанию.
-        logger: Логгер для сообщений.
-
-    Returns:
-        Целочисленное значение параметра.
-
-    Raises:
-        ValueError: Если значение не является корректным целым числом.
-    """
+    """Парсит целочисленный параметр из строки."""
     if not value:
         return default
 
     try:
         parsed = int(value)
     except ValueError:
-        error_msg = (
-            f'Некорректное значение '
-            f'параметра {param_name}: '
-            f"'{value}'. Ожидается "
-            f'положительное целое число. '
-            f'Используется значение '
-            f'по умолчанию: {default}'
-        )
-        if logger:
-            logger.warning(error_msg)
+        _log_parse_warning(param_name, value, default, logger)
         return default
-    else:
-        if parsed <= 0:
-            warning_msg = (
-                f'Параметр {param_name} должен '
-                f'быть > 0, используется '
-                f'значение по умолчанию: {default}'
-            )
-            if logger:
-                logger.warning(warning_msg)
-            return default
-        return parsed
+
+    if parsed <= 0:
+        _log_parse_warning(param_name, value, default, logger)
+        return default
+
+    return parsed
 
 
-def _mask_sensitive_data(
-    config: dict[str, str | int],
-    logger: logging.Logger | None = None,
+def _log_parse_warning(
+    param_name: str, value: str | None, default: int, logger: logging.Logger | None
 ) -> None:
-    """
-    Маскирует чувствительные данные в конфигурации для логирования.
+    """Логирует предупреждение о некорректном значении параметра."""
+    error_msg = (
+        f"Некорректное значение параметра {param_name}: '{value}'. "
+        f'Ожидается положительное целое число. '
+        f'Используется значение по умолчанию: {default}'
+    )
+    if logger:
+        logger.warning(error_msg)
 
-    Модифицирует конфигурацию in-place, заменяя пароли на '***'.
 
-    Args:
-        config: Словарь с конфигурацией.
-        logger: Логгер для сообщений.
-    """
-    sensitive_keys = {
-        'ORACLE_PASSWORD',
-        'PASSWORD',
-        'SECRET',
-        'TOKEN',
-    }
-
+def _mask_sensitive_data(config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    """Маскирует чувствительные данные в конфигурации."""
+    sensitive_keys = {'DB_CONNECT_URI', 'PASSWORD', 'SECRET', 'TOKEN'}
     masked_count = 0
-    for key, value in list(config.items()):
-        if any(sensitive in key.upper() for sensitive in sensitive_keys):
-            # Сохраняем оригинальное значение
-            config[f'_original_{key}'] = value
-            config[key] = '***'
-            masked_count += 1
+
+    for key in list(config.keys()):
+        if not any(sensitive in key.upper() for sensitive in sensitive_keys):
+            continue
+
+        original = config[key]
+        config[f'_original_{key}'] = original
+        config[key] = _get_masked_value(original)
+        masked_count += 1
 
     if logger and masked_count > 0:
-        logger.debug(
-            'Замаскировано %d чувствительных параметров',
-            masked_count,
-        )
+        logger.debug('Замаскировано %d чувствительных параметров', masked_count)
 
 
-def validate_config(  # noqa: C901
-    config: ConfigDict,
-    logger: logging.Logger | None = None,
+def _get_masked_value(value: Any) -> str:
+    """Возвращает замаскированное значение."""
+    if isinstance(value, str) and '://' in value:
+        return _mask_connection_string(value)
+    return '***'
+
+
+def _mask_connection_string(connection_string: str) -> str:
+    """Маскирует connection string, оставляя схему и хост."""
+    try:
+        parsed = urlparse(connection_string)
+    except Exception:
+        return '***'
+    else:
+        return f'{parsed.scheme}://***@{parsed.hostname}:***'
+
+
+def validate_config(
+    config: ConfigDict, logger: logging.Logger | None = None
 ) -> tuple[bool, list[str]]:
-    """
-    Валидирует параметры конфигурации.
-
-    Использует pattern matching для проверки различных типов ошибок
-    (улучшен в Python 3.14 с поддержкой nested patterns).
-
-    Args:
-        config: Словарь с конфигурацией для проверки.
-        logger: Логгер для сообщений.
-
-    Returns:
-        Кортеж (валидность, список ошибок).
-
-    Example:
-        >>> config = {'ORACLE_USER': 'admin'}
-        >>> valid, errors = validate_config(config)  # type: ignore
-        >>> if not valid:
-        ...     print(f'Ошибки: {errors}')
-    """
+    """Валидирует параметры конфигурации."""
     errors: list[str] = []
 
     if logger:
         logger.debug('Начало валидации конфигурации')
 
-    # Проверка наличия обязательных параметров
+    _validate_required_params(config, errors, logger)
+    _validate_db_type(config, errors, logger)
+    _validate_connection_string(config, errors, logger)
+    _validate_log_level(config, errors, logger)
+    _validate_numeric_params(config, errors, logger)
+    _validate_output_dir(config, errors, logger)
+
+    is_valid = len(errors) == 0
+
+    if logger:
+        if is_valid:
+            logger.info('✓ Конфигурация валидна')
+        else:
+            logger.error('✗ Валидация провалена: %d ошибок', len(errors))
+
+    return (is_valid, errors)
+
+
+def _validate_required_params(
+    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Проверяет наличие обязательных параметров."""
     for param in REQUIRED_CONFIG:
-        value = config.get(param)
-        if not value:
+        if param not in config or not config.get(param):
             error = f'Отсутствует обязательный параметр: {param}'
             errors.append(error)
             if logger:
                 logger.error(error)
 
-    # Валидация LOG_LEVEL
-    log_level = config.get('LOG_LEVEL', 'INFO')
-    match log_level:
-        case str(level) if level.upper() in VALID_LOG_LEVELS:
-            pass  # Валидный уровень
-        case str(level):
-            error = (
-                f"Некорректный LOG_LEVEL: '{level}'. "
-                f'Допустимые значения: {", ".join(VALID_LOG_LEVELS)}'
-            )
+
+def _validate_db_type(config: ConfigDict, errors: list[str], logger: logging.Logger | None) -> None:
+    """Валидирует тип базы данных."""
+    db_type = config.get('DB_TYPE', '')
+    if not isinstance(db_type, str):
+        error = 'DB_TYPE должен быть строкой'
+        errors.append(error)
+        if logger:
+            logger.error(error)
+        return
+
+    if db_type.lower() in VALID_DB_TYPES:
+        if logger:
+            logger.debug('DB_TYPE валиден: %s', db_type)
+        return
+
+    error = f"Некорректный DB_TYPE: '{db_type}'. Допустимые значения: {', '.join(VALID_DB_TYPES)}"
+    errors.append(error)
+    if logger:
+        logger.error(error)
+
+
+def _validate_connection_string(
+    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Валидирует строку подключения."""
+    conn_str = config.get('DB_CONNECT_URI')
+    if not conn_str or not isinstance(conn_str, str):
+        return
+
+    original_str = _get_original_connection_string(config, conn_str)
+    if not original_str:
+        return
+
+    _check_connection_string_validity(original_str, errors, logger)
+
+
+def _get_original_connection_string(config: ConfigDict, fallback: str) -> str | None:
+    """Получает оригинальную connection string из конфигурации."""
+    original_key = '_original_CONNECTION_STRING'
+    check_str = config.get(original_key, fallback)
+    return check_str if isinstance(check_str, str) else None
+
+
+def _check_connection_string_validity(
+    connection_string: str, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Проверяет валидность connection string."""
+    try:
+        from oracle_to_excel.database import validate_connection_string  # noqa: PLC0415
+
+        valid, error_msg = validate_connection_string(connection_string)
+        if not valid:
+            error = f'DB_CONNECT_URI невалиден: {error_msg}'
             errors.append(error)
             if logger:
                 logger.error(error)
+    except ImportError:
+        if logger:
+            logger.debug('Модуль database недоступен, пропуск валидации DB_CONNECT_URI')
 
-    # Валидация числовых параметров
+
+def _validate_log_level(
+    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Валидирует уровень логирования."""
+    log_level = config.get('LOG_LEVEL', 'INFO')
+    if not isinstance(log_level, str):
+        error = 'LOG_LEVEL должен быть строкой'
+        errors.append(error)
+        if logger:
+            logger.error(error)
+        return
+
+    if log_level.upper() not in VALID_LOG_LEVELS:
+        error = (
+            f"Некорректный LOG_LEVEL: '{log_level}'. "
+            f'Допустимые значения: {", ".join(VALID_LOG_LEVELS)}'
+        )
+        errors.append(error)
+        if logger:
+            logger.error(error)
+
+
+def _validate_numeric_params(
+    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Валидирует числовые параметры."""
     numeric_params = {
-        'POOL_MIN': (1, 100),
-        'POOL_MAX': (1, 100),
-        'POOL_INCREMENT': (1, 10),
         'FETCH_ARRAY_SIZE': (100, 10000),
         'CHUNK_SIZE': (1000, 100000),
         'QUERY_TIMEOUT': (10, 3600),
@@ -340,128 +339,91 @@ def validate_config(  # noqa: C901
     }
 
     for param, (min_val, max_val) in numeric_params.items():
-        value = config.get(param)
+        _validate_single_numeric_param(param, min_val, max_val, config, errors, logger)
 
-        # Pattern matching для проверки диапазонов
-        match value:
-            case int(val) if min_val <= val <= max_val:
-                pass  # Валидное значение
-            case int(val):
-                error = f'{param} = {val} вне допустимого диапазона [{min_val}, {max_val}]'
-                errors.append(error)
-                if logger:
-                    logger.error(error)
-            case None:
-                pass  # Опциональный параметр
-            case _:
-                error = f'{param} должен быть целым числом'
-                errors.append(error)
-                if logger:
-                    logger.error(error)
 
-    # Проверка логической согласованности
-    pool_min = config.get('POOL_MIN', 2)
-    pool_max = config.get('POOL_MAX', 5)
+def _validate_single_numeric_param(
+    param: str,
+    min_val: int,
+    max_val: int,
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None,
+) -> None:
+    """Валидирует один числовой параметр."""
+    value = config.get(param)
+    if value is None:
+        return
 
-    match (pool_min, pool_max):
-        case (int(min_v), int(max_v)) if min_v > max_v:
-            error = f'POOL_MIN ({min_v}) не может быть больше POOL_MAX ({max_v})'
-            errors.append(error)
-            if logger:
-                logger.error(error)
-        case _:
-            pass
+    if not isinstance(value, int):
+        error = f'{param} должен быть целым числом'
+        errors.append(error)
+        if logger:
+            logger.error(error)
+        return
 
-    # Валидация OUTPUT_DIR
+    if not (min_val <= value <= max_val):
+        error = f'{param} = {value} вне допустимого диапазона [{min_val}, {max_val}]'
+        errors.append(error)
+        if logger:
+            logger.error(error)
+
+
+def _validate_output_dir(
+    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+) -> None:
+    """Валидирует директорию для экспорта."""
     output_dir = config.get('OUTPUT_DIR', './exports')
-    if isinstance(output_dir, str):
-        dir_path = Path(output_dir)
-        try:
-            # Создаем директорию если не существует
-            dir_path.mkdir(parents=True, exist_ok=True)
-            if logger:
-                logger.debug(
-                    'Директория для экспорта: %s',
-                    dir_path.absolute(),
-                )
+    if not isinstance(output_dir, str):
+        return
 
-            # Проверяем права на запись
-            if not os.access(dir_path, os.W_OK):
-                error = f'Нет прав на запись в директорию: {dir_path}'
-                errors.append(error)
-                if logger:
-                    logger.error(error)
-        except OSError:
-            error = 'Ne udalosy sozdat OUTPUT_DIR'
-            errors.append(error)
-            if logger:
-                logger.exception(error)
+    dir_path = Path(output_dir)
+    if not _create_output_directory(dir_path, errors, logger):
+        return
 
-    is_valid = len(errors) == 0
+    _check_directory_permissions(dir_path, errors, logger)
+
+
+def _create_output_directory(
+    dir_path: Path, errors: list[str], logger: logging.Logger | None
+) -> bool:
+    """Создает директорию для экспорта."""
+    try:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        error = f'Не удалось создать OUTPUT_DIR: {e}'
+        errors.append(error)
+        if logger:
+            logger.exception(error)
+        return False
 
     if logger:
-        if is_valid:
-            logger.info('Конфигурация валидна')
-        else:
-            logger.error(
-                'Валидация провалена: %d ошибок',
-                len(errors),
-            )
-
-    return (is_valid, errors)
+        logger.debug('Директория для экспорта: %s', dir_path.absolute())
+    return True
 
 
-def get_config_value(
-    config: ConfigDict,
-    key: str,
-    default: object = None,
-) -> object:
-    """
-    Получает значение из конфигурации.
-
-    Args:
-        config: Словарь конфигурации.
-        key: Ключ для получения значения.
-        default: Значение по умолчанию.
-
-    Returns:
-        Значение из конфигурации или default.
-    """
-    return config.get(key, default)
-
-
-def export_config_to_dict(
-    config: ConfigDict,
-) -> dict[str, str | int]:
-    """
-    Экспортирует конфигурацию в обычный словарь.
-
-    Args:
-        config: TypedDict конфигурация.
-
-    Returns:
-        Обычный словарь.
-    """
-    return dict(config)  # type: ignore
-
-
-def restore_sensitive_data(
-    config: dict[str, str | int],
-    logger: logging.Logger | None = None,
+def _check_directory_permissions(
+    dir_path: Path, errors: list[str], logger: logging.Logger | None
 ) -> None:
-    """
-    Восстанавливает оригинальные чувствительные данные.
+    """Проверяет права на запись в директорию."""
+    if not os.access(dir_path, os.W_OK):
+        error = f'Нет прав на запись в директорию: {dir_path}'
+        errors.append(error)
+        if logger:
+            logger.error(error)
 
-    После маскирования для логирования, эта функция восстанавливает
-    реальные значения паролей для использования в приложении.
 
-    Args:
-        config: Словарь с конфигурацией.
-        logger: Логгер для сообщений.
-    """
+def get_config_value[T](config: ConfigDict, key: str, default: T | None = None) -> T | None:
+    """Получает значение из конфигурации."""
+    value = config.get(key, default)
+    return cast(T | None, value)
+
+
+def restore_sensitive_data(config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+    """Восстанавливает оригинальные чувствительные данные."""
     keys_to_restore = [k for k in config if k.startswith('_original_')]
-
     restored_count = 0
+
     for key in keys_to_restore:
         original_key = key.replace('_original_', '')
         if original_key in config:
@@ -470,112 +432,117 @@ def restore_sensitive_data(
         del config[key]
 
     if logger and restored_count > 0:
-        logger.debug(
-            'Восстановлено %d чувствительных параметров',
-            restored_count,
-        )
+        logger.debug('Восстановлено %d чувствительных параметров', restored_count)
 
 
 def print_config_summary(
-    config: ConfigDict,
-    *,
-    mask_sensitive: bool = True,
-    logger: logging.Logger | None = None,
+    config: ConfigDict, *, mask_sensitive: bool = True, logger: logging.Logger | None = None
 ) -> None:
     """
-    Выводит краткую сводку конфигурации через логгер.
+    Выводит краткую сводку конфигурации.
 
     Args:
         config: Словарь конфигурации.
         mask_sensitive: Маскировать ли чувствительные данные.
         logger: Логгер для вывода (если None, используется print).
     """
-    output_lines = []
-    output_lines.append('')
-    output_lines.append('=' * 50)
-    output_lines.append('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
-    output_lines.append('=' * 50)
-
-    # Группируем параметры
-    db_params = ['DB_CONNECT_URI']
-    query_params = [
-        'FETCH_ARRAY_SIZE',
-        'CHUNK_SIZE',
-        'QUERY_TIMEOUT',
-    ]
-    excel_params = [
-        'MAX_COLUMN_WIDTH',
-        'COLUMN_WIDTH_SAMPLE_SIZE',
-    ]
-    performance_params = [
-        'ENABLE_BATCH_PROCESSING',
-        'BATCH_SIZE',
-    ]
-    other_params = [
-        'LOG_LEVEL',
-        'LOG_FILE',
-        'OUTPUT_DIR',
-        'SHOW_PROGRESS_BAR',
-        'PROGRESS_UPDATE_INTERVAL',
-    ]
-
     sections = [
-        ('База данных', db_params),
-        ('Параметры запросов', query_params),
-        ('Параметры Excel', excel_params),
-        ('Параметры производительности', performance_params),
-        ('Прочее', other_params),
+        ('База данных', ['DB_TYPE', 'DB_CONNECT_URI']),
+        ('Параметры запросов', ['FETCH_ARRAY_SIZE', 'CHUNK_SIZE', 'QUERY_TIMEOUT']),
+        ('Параметры Excel', ['MAX_COLUMN_WIDTH', 'COLUMN_WIDTH_SAMPLE_SIZE']),
+        ('Прочее', ['LOG_LEVEL', 'OUTPUT_DIR']),
     ]
+
+    if logger:
+        # Используем отдельные вызовы logger для каждой строки
+        _log_config_header(logger)
+
+        for section_name, params in sections:
+            _log_config_section(section_name, params, config, mask_sensitive, logger)
+
+        _log_config_footer(logger)
+    else:
+        _print_config_to_console(sections, config, mask_sensitive)
+
+
+def _log_config_header(logger: logging.Logger) -> None:
+    """Логирует заголовок сводки конфигурации."""
+    logger.info('=' * 60)
+    logger.info('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
+    logger.info('=' * 60)
+
+
+def _log_config_section(
+    section_name: str,
+    params: list[str],
+    config: ConfigDict,
+    mask_sensitive: bool,
+    logger: logging.Logger,
+) -> None:
+    """Логирует одну секцию конфигурации."""
+    logger.info('')
+    logger.info('%s:', section_name)
+    logger.info('-' * 40)
+
+    for param in params:
+        value = config.get(param, 'не задано')
+        if mask_sensitive and 'DB_CONNECT_URI' in param:
+            display_value = '***' if value != 'не задано' else value
+        else:
+            display_value = value
+        logger.info('  %-28s %s', param, display_value)
+
+
+def _log_config_footer(logger: logging.Logger) -> None:
+    """Логирует подвал сводки конфигурации."""
+    logger.info('')
+    logger.info('=' * 60)
+
+
+def _print_config_to_console(
+    sections: list[tuple[str, list[str]]],
+    config: ConfigDict,
+    mask_sensitive: bool,
+) -> None:
+    """Выводит конфигурацию в консоль через print."""
+    print()
+    print('=' * 60)
+    print('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
+    print('=' * 60)
 
     for section_name, params in sections:
-        output_lines.append('')
-        output_lines.append(f'{section_name}:')
-        output_lines.append('-' * 30)
+        print()
+        print(f'{section_name}:')
+        print('-' * 40)
+
         for param in params:
             value = config.get(param, 'не задано')
-
-            # Маскируем чувствительные данные при выводе
-            if mask_sensitive and 'PASSWORD' in param:
+            if mask_sensitive and 'DB_CONNECT_URI' in param:
                 display_value = '***' if value != 'не задано' else value
             else:
                 display_value = value
+            print(f'  {param:<28} {display_value}')
 
-            output_lines.append(f'  {param:.<30} {display_value}')
+    print()
+    print('=' * 60)
+    print()
 
-    output_lines.append('')
-    output_lines.append('=' * 50)
-    output_lines.append('')
 
-    # Выводим через логгер или print
-    full_output = '\n'.join(output_lines)
-    if logger:
-        logger.info('Конфигурация:')
-        for line in output_lines:
-            logger.info(line)
-    else:
-        print(full_output)
+def export_config_to_dict(config: ConfigDict) -> dict[str, Any]:
+    """Экспортирует конфигурацию в словарь."""
+    return dict(config)
 
 
 def create_env_example(
-    output_path: str = '.env.example',
-    logger: logging.Logger | None = None,
+    output_path: str = '.env.example', logger: logging.Logger | None = None
 ) -> None:
-    """
-    Создает файл .env.example с шаблоном конфигурации.
-
-    Args:
-        output_path: Путь к создаваемому файлу.
-        logger: Логгер для сообщений.
-    """
-    template = """# Oracle Database Connection
-ORACLE_USER=your_username
-ORACLE_PASSWORD=your_password
-ORACLE_DSN=localhost:1521/ORCL
-
-# Connection Pool Settings
-POOL_MIN=2
-POOL_MAX=5
-POOL_INCREMENT=1
+    """Создает файл .env.example."""
+    template = """# Database Configuration
+DB_TYPE=postgresql
+# Connection string examples:
+# Oracle: oracle://username:password@hostname:1521/service_name
+# PostgreSQL: postgresql://username:password@hostname:5432/database_name
+CONNECTION_STRING=postgresql://user:password@localhost:5432/mydb
 
 # Query Settings
 FETCH_ARRAY_SIZE=1000
@@ -596,26 +563,72 @@ LOG_LEVEL=INFO
     try:
         with Path(output_path).open('w', encoding='utf-8') as f:
             f.write(template)
-        msg = f'File {output_path} created successfully'
+        msg = f'Файл {output_path} успешно создан'
         if logger:
             logger.info(msg)
         else:
             print(msg)
-    except OSError:
-        msg = f'Error creating file: {output_path}'
+    except OSError as e:
+        msg = f'Ошибка при создании файла: {e}'
         if logger:
             logger.exception(msg)
         else:
             print(msg)
 
 
+def _test_module() -> None:
+    """Тестирует модуль конфигурации."""
+    from oracle_to_excel.logger import setup_logging  # noqa: PLC0415
+
+    logger = setup_logging('DEBUG', console_output=True)
+    logger.info('Тестирование модуля config.py...')
+
+    test_env = Path('.env.test')
+    test_env.write_text(
+        """
+DB_TYPE=postgresql
+CONNECTION_STRING=postgresql://test_user:test_pass@localhost:5432/testdb
+LOG_LEVEL=DEBUG
+OUTPUT_DIR=./test_exports
+FETCH_ARRAY_SIZE=1000
+""",
+        encoding='utf-8',
+    )
+
+    try:
+        config = load_config('.env.test')
+        logger.info('✓ Конфигурация загружена')
+
+        valid, errors = validate_config(config, logger)
+        if valid:
+            logger.info('✓ Конфигурация валидна')
+        else:
+            logger.error('✗ Ошибки валидации: %s', errors)
+
+        print_config_summary(config, logger=logger)
+        restore_sensitive_data(cast(dict[str, Any], config), logger)
+        logger.info('✓ Чувствительные данные восстановлены')
+
+    finally:
+        if test_env.exists():
+            test_env.unlink()
+            logger.info('✓ Тестовый файл удален')
+
+        test_dir = Path('./test_exports')
+        if test_dir.exists():
+            test_dir.rmdir()
+            logger.info('✓ Тестовая директория удалена')
+
+
 if __name__ == '__main__':
-    # Если модуль запущен напрямую, создаем .env.example
     import sys
 
     match sys.argv:
+        case [_, '--test']:
+            _test_module()
         case [_, '--create-example']:
             create_env_example()
         case _:
             print('Использование:')
+            print('  python config.py --test           # Запустить тесты')
             print('  python config.py --create-example # Создать .env.example')
