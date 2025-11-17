@@ -1,0 +1,37 @@
+2025-11-17 18:32:32 - oracle_exporter - INFO - Конфигурация успешно загружена и логирование настроено.
+2025-11-17 18:32:32 - oracle_exporter - INFO - Конфигурация:
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - ==================================================
+2025-11-17 18:32:32 - oracle_exporter - INFO - КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+2025-11-17 18:32:32 - oracle_exporter - INFO - ==================================================
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - База данных:
+2025-11-17 18:32:32 - oracle_exporter - INFO - ------------------------------
+2025-11-17 18:32:32 - oracle_exporter - INFO -   ORACLE_USER................... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO -   ORACLE_PASSWORD............... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO -   ORACLE_DSN.................... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - Connection Pool:
+2025-11-17 18:32:32 - oracle_exporter - INFO - ------------------------------
+2025-11-17 18:32:32 - oracle_exporter - INFO -   POOL_MIN...................... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO -   POOL_MAX...................... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO -   POOL_INCREMENT................ не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - Параметры запросов:
+2025-11-17 18:32:32 - oracle_exporter - INFO - ------------------------------
+2025-11-17 18:32:32 - oracle_exporter - INFO -   FETCH_ARRAY_SIZE.............. 1000
+2025-11-17 18:32:32 - oracle_exporter - INFO -   CHUNK_SIZE.................... 5000
+2025-11-17 18:32:32 - oracle_exporter - INFO -   QUERY_TIMEOUT................. 300
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - Параметры Excel:
+2025-11-17 18:32:32 - oracle_exporter - INFO - ------------------------------
+2025-11-17 18:32:32 - oracle_exporter - INFO -   MAX_COLUMN_WIDTH.............. 50
+2025-11-17 18:32:32 - oracle_exporter - INFO -   COLUMN_WIDTH_SAMPLE_SIZE...... не задано
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - Прочее:
+2025-11-17 18:32:32 - oracle_exporter - INFO - ------------------------------
+2025-11-17 18:32:32 - oracle_exporter - INFO -   LOG_LEVEL..................... INFO
+2025-11-17 18:32:32 - oracle_exporter - INFO -   OUTPUT_DIR.................... ./exports
+2025-11-17 18:32:32 - oracle_exporter - INFO - 
+2025-11-17 18:32:32 - oracle_exporter - INFO - ==================================================
+2025-11-17 18:32:32 - oracle_exporter - INFO - 

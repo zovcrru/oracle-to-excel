@@ -1,0 +1,975 @@
+{-----------------------------------------------------------------------------  To_EXCEL06GR  -------------------}
+{----------------------------------}
+procedure TForm06gr.To_EXCEL06GR;
+const
+//  плавающий размер страницы   (0 - ни одного заголовка группы на Page не попало)
+//  номер элемента массива = кол-во титулов (TITUL=Y) на Page
+//  значение элемента массива  = кол-во строк на Page
+ Size_Page: array[0..19] of integer =(53,52,51,51,50,50,49,49,48,48,47,47,47,46,46,46,45,45,44,44);
+ Line_OGL = 3;    // с какой строки формировать оглавление  = отступ сверху
+
+
+var
+WorkBk : _WorkBook;
+WorkSheet, Worksheet_OGL : _WorkSheet;
+C, I,J,Row, Row_STR, Row_GKZ, STR_min,STR_max, n_str,
+    First_Row_Gr, First_Row_Gr_G,   v_pred_Row_Gr_G, Last_Row_Gr,Last_Row_Shadow : Integer;
+{ C - кол-во колонок
+  Row  - номер текущей строки в балансе, кроме шапки (в конце = кол. строк)
+  Row_STR  -  значение STR текущее (в конце группы категорий = макс.)
+  Row_GKZ   - номер строки в балансе, если поле "Протокол ГКЗ" is not null
+  STR_min   - номер строки в балансе, где STR = min (STR - группа категорий)
+  STR_max   - номер строки в балансе, где STR = max
+  Line_Cat_Row и n_str - номер строки для вычисления, где рисовать
+               разделительную линию между категориями
+  First_Row_Gr  - первая строка в группе (заголовок)
+  First_Row_Gr_G,  v_pred_Row_Gr_G  -  форматирование ГКЗ в случае наличия только одной строки категории
+  Last_Row_Gr   - последняя строка в группе (сноска, примечание)
+  Last_Row_Shadow   - последняя строка для затенения заголовка группы (ZLO)
+  ColorRow   -  из таблицы Report_Color, атрибуты вывода на печать
+}
+
+S, Tip_Group, Vid_Group, fill_str, fill_probel,  vvv,  pos_GKZ,pos_BORDER   : string;
+TabGrid : Variant;
+
+
+vRange, vRange_OGL,  v_cell: Variant;//Excel2000.Range;
+
+
+Line_Cat_Row  :  array  [0..8] of integer;
+{ nn_Row_page - кол. строк на странице  (рассчитывается),
+  nn_Titul_page - кол.заголовков групп на странице, рассчитывается (от этого зависит размер PAGE)
+  nn_Page   - кол. страниц, рассчитывается
+  Row_OGL  - управляющая строка в оглавлении
+  n_Col_Minus :=2  - 2 колонки вычесть из форматирования по Range
+  nn_VidG  -  текущий номер вида газа  (поле VID_G)
+  pos_GKZ  -  колонка, где выводятся Организация и Ном.протокола ГКЗ
+  pos_BORDER  -   колонка, где заканчивается обводка категорий (линия по левой границе)
+ }
+nn_Row_page, nn_Titul_page, nn_Page, Row_OGL, n_Col_Minus, nn_VidG  : integer;
+f_content, f_str, f_titul, f_fname, f_fsize, f_fstyle, f_fweight, f_fillpatt,
+f_ffcolor, f_bfcolor, f_tip_group, f_vid_group, f_numg, f_cat, f_vid_g : string;
+
+  vvv_SH: array[0..79] of char;
+  nres,  shapka  : string;
+
+ wss: widestring;
+
+ size_shapka : Integer;  //количество строк в шапке
+
+
+
+//----
+procedure Format_GKZ;
+begin
+ //   Форматирование ГКЗ   // and (Tip_Group='W')
+if (Row_STR>0) and (Row_Gkz>0) and ((Vid_Group='ZLO') or (Vid_Group='NZO')) then
+ begin
+
+//  if Str_Min=Str_Max  then  begin    // если в категориях только 1 строка, начать выводить Протокол ГКЗ выше
+  if Str_Min=Last_Row_Gr  then  begin    // если в категориях только 1 строка, начать выводить Протокол ГКЗ выше
+    vRange:= Worksheet.Range[ pos_GKZ +IntToStr(size_shapka+Row_Gkz),  pos_GKZ +IntToStr(size_shapka+ v_pred_Row_Gr_G)];//+1)];
+    vRange.VerticalAlignment := xlBottom;
+  end
+   else  begin
+  vRange:= Worksheet.Range[ pos_GKZ +IntToStr(size_shapka+Row_Gkz),  pos_GKZ +IntToStr(size_shapka+Row_Gkz+Row_STR-1)];
+//    Range:= Worksheet.Range[  pos_GKZ +IntToStr(11+Row_Gkz),  pos_GKZ +IntToStr(11+Row_Gkz+STR_Max-1)];
+  vRange.VerticalAlignment := xlTop
+  end;
+
+
+if    (who='Х') then
+  vRange.Select;
+
+  vRange.MergeCells := true;
+  vRange.WrapText:=true;
+
+if (StrToInt(f_fsize)>7) then    vRange.Font.Size:=7;
+
+ end;      // 'ZLO' or 'NZO'
+
+end;    // end of Format_GKZ;
+
+
+
+
+
+//----
+procedure Border_CAT;
+var
+  n_str : Integer;
+  ss  : String;
+  ss_par  : String;
+begin
+ // обводка категорий и запасов   и выделение групп затенением  //  and (Tip_Group='W')
+if (Row_STR>0)  then begin
+  if ((Vid_Group='ZLO') or (Vid_Group='NZO'))
+   then     S := 'C'
+   else if  ( (Vid_Group<>'ZLO') or (Vid_Group<>'NZO') or (Vid_Group<>'VO')  )
+        then     S := 'C';
+if res='O' then begin
+   ss:='J';
+   ss_par:='L';      end
+   else  begin
+   ss:='K';
+   ss_par:='M';      end;
+
+
+//xlEdgeLeft  =$00000007;       //  проба
+//xlHairline = $00000001;
+//xlEdgeBottom =$00000009 ;
+//xlEdgeTop  =$00000008;
+
+  vRange:= Worksheet.Range[S+IntToStr(size_shapka+STR_min),Ss+IntToStr(size_shapka+STR_max)];
+
+   vrange.Borders.Item[xlEdgeLeft].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeLeft].ColorIndex:= 48 ;
+
+   vrange.Borders.Item[xlEdgeRight].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeRight].ColorIndex:= 48 ;
+
+    vrange.Borders.Item[xlEdgeBottom].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeBottom].ColorIndex:= 48 ;
+
+   vrange.Borders.Item[xlEdgeTop].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeTop].ColorIndex:= 48 ;
+
+  vrange.Borders.Item[xlInsideVertical].weight:=xlHairline;
+  vrange.Borders.Item[xlInsideVertical].ColorIndex := 15;
+
+
+ for n_Str:=1 TO 8 DO
+  if  Line_Cat_Row[n_str] >0 then  begin
+    vRange:= Worksheet.Range[S+IntToStr(size_shapka+Line_Cat_Row[n_str]),
+                            ss+IntToStr(size_shapka+ Line_Cat_Row[n_str])];
+    vrange.Borders.Item[xlEdgeTop].weight:=xlHairline; //xlHairline;
+    vrange.Borders.Item[xlEdgeTop].ColorIndex := 15;
+    end;
+
+//------------- разлиновка параметров
+
+  vRange:= Worksheet.Range[ss_par+IntToStr(size_shapka+STR_min),pos_BORDER+IntToStr(size_shapka+STR_max)];
+
+   vrange.Borders.Item[xlEdgeLeft].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeLeft].ColorIndex:= 48 ;
+
+   vrange.Borders.Item[xlEdgeRight].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeRight].ColorIndex:= 48 ;
+
+    vrange.Borders.Item[xlEdgeBottom].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeBottom].ColorIndex:= 48 ;
+
+   vrange.Borders.Item[xlEdgeTop].Weight:= xlHairline;
+   vrange.Borders.Item[xlEdgeTop].ColorIndex:= 48 ;
+
+  vrange.Borders.Item[xlInsideVertical].weight:=xlHairline;
+  vrange.Borders.Item[xlInsideVertical].ColorIndex := 15;
+
+{//  внешняя вертикальная  правая
+  vRange:= Worksheet.Range[Worksheet.Cells.Item[IntToStr(first_row),C],
+                          Worksheet.Cells.Item[IntToStr(last_row),C] ];
+     range.Borders.Item[xlEdgeRight].Weight:= xlThin ; // xlHairline;//
+     range.Borders.Item[xlEdgeRight].ColorIndex:= xlAutomatic ;
+     }
+{
+ vRange:= Worksheet.Range[S+IntToStr(size_shapka+STR_min),pos_BORDER+IntToStr(size_shapka+STR_max)];
+  vrange.Borders.Item[xlInsideVertical].weight:=xlHairline;
+  vrange.Borders.Item[xlInsideVertical].ColorIndex := 15;
+     }
+
+for n_Str:=1 TO 8 DO
+  if  Line_Cat_Row[n_str] >0 then  begin
+    vRange:= Worksheet.Range[ss_par+IntToStr(size_shapka+Line_Cat_Row[n_str]),
+                            pos_BORDER+IntToStr(size_shapka+ Line_Cat_Row[n_str])];
+    vrange.Borders.Item[xlEdgeTop].weight:=xlHairline; //xlHairline;
+    vrange.Borders.Item[xlEdgeTop].ColorIndex := 15;
+    end;
+
+   end;   //  if   (Row_STR>0)
+
+end;    //  end of Border_CAT;
+
+
+
+
+
+
+
+
+
+
+begin    //-- To_EXCEL06GR
+
+
+
+
+  try
+
+
+// SES:=ses_edit.Text;   res :=res_edit.Text;
+
+ fill_str :='.';
+ for J:=0 TO 210 DO  fill_str := fill_str + '.';
+
+   qData.Close;
+   qData.SQL.Clear;
+   qData.SQL.Text:='select count(distinct npnumG) as COUNT_GR from '+TABLE_SN+
+     ' where   ses='+Ses; //+' and npnumG<=13';    //
+   qData.Execute;
+   countGroup:= qData.Field('COUNT_GR');
+
+   Count_FIELDS :=26;  // 30
+
+
+
+{   MessageDlg('Welcome to Microsoft Excel version ' +
+       XLApp.Application.Version[0] + ' running on ' +
+    XLApp.Application.OperatingSystem[0] + '!',        mtInformation, [mbOk] , 0);
+
+   ShowMessage( 'Welcome to Microsoft Excel version ' +
+    XLApp.Application.Version[0] + ' running on ' +
+    XLApp.Application.OperatingSystem[0] + '!' );
+
+    formstart.Label1.Caption := 'Excel version ' +
+                     XLApp.Application.Version[0] + ' running on ' +
+                     XLApp.Application.OperatingSystem[0] + '!';
+
+
+ wss :=    XLApp.Application.Version[Locale_User_Default];     //Locale_User_Default    XLApp.Get_Version[Locale_User_Default]; //
+begin
+   MessageDlg(' Версия EXCEL : ' + XLApp.Application.Version[Locale_User_Default],
+           mtInformation, [mbOk] , 0);
+end;
+      }
+//exit;
+
+
+
+     XLApp.Application.Visible[Locale_User_Default]:=    False;    //      true; //
+
+
+   // Соединяемся с сервером TExcelApplication
+//  XLApp.Application.EnableEvents:=False;   XLApp.Application.DisplayAlerts[0]:=False; //  проба
+
+
+if res='O' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\OIL_NC_06gr.xlt',0);    // Paramstr(4) = номер раздела
+if res='G' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\GAS_NC_06gr.xlt',0);
+if res='C' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\CON_NC_06gr.xlt',0);
+if res='E' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\EPB_NC_06gr.xlt',0);
+if res='P' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\EPB_NC_06gr.xlt',0);
+if res='B' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\EPB_NC_06gr.xlt',0);
+if res='S' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\SE_NC_06gr.xlt',0);
+if res='EPB' then  WorkBk :=XLApp.Workbooks.Add( MyDir + '\EPB_NC_06gr.xlt',0);
+
+
+//   WorkBk.Activate(LOCALE_USER_DEFAULT);
+
+    Screen.Cursor  := crHourglass;    // Show hourglass cursor
+
+
+   WorkSheet := WorkBk.WorkSheets.Get_Item(1) as _WorkSheet;
+   WorkSheet_OGL := WorkBk.WorkSheets.Get_Item(2) as _WorkSheet;
+
+{    WorkSheet.EnableSelection := $FFFFEFD2;
+    WorkSheet.Protect('123', False, True, True, True,1);
+    WorkSheet_OGL.EnableSelection := $FFFFEFD2;
+    WorkSheet_OGL.Protect('123', False, True, True, True,1);
+ }
+
+gb1 := IntToStr(StrToInt(gb)+1);
+FillChar(vvv_SH, 80, Ord(' '));
+//size_shapka :=16;
+
+  Worksheet.Range['B1','B1'].Value:=NOW() ;
+
+if (res='O')   then  begin //or (res='G')
+  n_Col_Minus :=2;
+  pos_GKZ :='K';
+  pos_BORDER :='N';
+  size_shapka :=13;
+
+   for I:=2 TO size_shapka-5 DO     //  по строкам; -5 для того, чтобы "рентаб." не обрабатывались, иначе они превращаются в обычные, а не BOLD
+     for J:=4 TO 15 DO   begin           // по колонкам
+        vRange:= Worksheet.Range[Worksheet.Cells.Item[i,j],
+                               Worksheet.Cells.Item[i,j] ];
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&&',IntToStr(StrToInt(gb)+1), [rfReplaceAll]);
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&',IntToStr(StrToInt(gb)), [rfReplaceAll]);
+    end;
+end;
+
+if  (res='G')  then   size_shapka :=14;
+if  (res='C')  then   size_shapka :=13;
+
+if  (res='G') or (res='C')  then  begin
+//size_shapka :=14;
+  n_Col_Minus :=1;
+  pos_GKZ :='L';
+  if  (res='G')   then      pos_BORDER :='O'
+    else   pos_BORDER :='N';
+
+   Worksheet.Range['B1','B1'].Value:=NOW() ;
+
+     for I:=2 TO size_shapka-5 DO        //  по строкам
+     for J:=4 TO 15 DO   begin           // по колонкам
+        vRange:= Worksheet.Range[Worksheet.Cells.Item[i,j],
+                               Worksheet.Cells.Item[i,j] ];
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&&',IntToStr(StrToInt(gb)+1), [rfReplaceAll]);
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&',IntToStr(StrToInt(gb)), [rfReplaceAll]);
+    end;
+end;
+
+
+if (res='E') or (res='P') or (res='B') or (res='S')  or (res='EPB') then  begin
+
+ if (res='E') then       nres := 'Этан';
+
+ if (res='P') then       nres := 'Пропан';
+
+ if (res='B') then        nres := 'Бутан';
+
+ if (res='EPB') then     nres := 'Компонент';
+
+ if (res='S') then       nres := 'Сера';
+//   Worksheet.Range['I8','I8'].Value:='тыс.т';
+
+
+
+//Shapka :=Worksheet.Range['A2','A2'].Value;
+// AnsiReplaceText(Worksheet.Range['A2','A2'].Value, '&', Worksheet.Range['A2','A2'].Value);
+
+  n_Col_Minus :=1;
+  size_shapka :=14;
+  pos_GKZ :='L';
+  pos_BORDER :='N';
+
+
+   Worksheet.Range['B1','B1'].Value:=NOW() ;
+
+     for I:=2 TO size_shapka-5 DO        //  по строкам
+     for J:=1 TO 15 DO   begin           // по колонкам
+        vRange:= Worksheet.Range[Worksheet.Cells.Item[i,j],
+                               Worksheet.Cells.Item[i,j] ];
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&&',IntToStr(StrToInt(gb)+1), [rfReplaceAll]);
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '&',IntToStr(StrToInt(gb)), [rfReplaceAll]);
+        vRange.Value:= StringReplace(vRange.Value,
+                                  '$',nres, [rfReplaceAll]);
+    end;
+
+Worksheet.Name := 'Форма 06-гр        '+nres;
+WorkSheet.PageSetup.LeftFooter :=
+     '&6      Баланс запасов         Форма 06-гр        '+nres;
+
+end;   // конец if (res='ETAN') or (res='PROPAN') or (res='BUTAN') or (res='SERA')
+
+   Row := 0;  // идем по строкам и наращиваем Row;
+   C :=  15;  // кол-во колонок;
+
+
+// Создаём массив-матрицу
+   TabGrid := VarArrayCreate([0,0,0,(C-1 )],  varVariant);
+
+
+      nn_Row_Page := 0;    nn_Titul_Page :=0;    nn_Page :=0;  Row_OGL :=0;
+
+   FormStart.ProgressBar1.Max := countGroup;
+
+  FOR I:=1 TO COUNTGROUP DO
+    begin
+        FormStart.ProgressBar1.StepIt;
+
+ v_pred_Row_Gr_G := 0;      //  номер строки пред. группы газа - для форматир. ГКЗ в случае одной строки категории
+    First_Row_GR :=0;
+    Row_GKZ  := 0;
+    STR_min  := 0;
+    STR_max  := 0;
+    Row_STR  := 0;  // номер текущей строки
+    n_Str  := 0;    // индекс строки для заполнения массива Line_Cat_Row
+    nn_VidG := 0;
+    Last_Row_Shadow := 0;
+    for J:=0 TO 8 DO  Line_Cat_Row[J]:=0;
+
+
+
+    qData.SQL.Clear;
+     qData.SQL.Text:='select w.num, w.numg,npnumg,str,fields1,fields2, fields3,'+
+      ' fields4, fields5, fields6, fields7,fields8, fields9, fields10,  fields11,'+
+      ' fields12, fields13, fields14, fields15,w.titul, f_name, f_size, f_style, f_weight, fillpatt,'+
+      ' ffcolor, bfcolor,tip_group,vid_group,content,cat,vid_g  from '+TABLE_SN+
+      ' w, REPORT_COLOR c where  npnumG='+ IntToStr(i)+
+      ' and c.numg=w.numg and w.titul=c.titul and report=''6GR''  '+
+      ' and ses='+Ses +
+      '   UNION  select w.num, w.numg,npnumg,str,fields1, fields2, fields3, fields4,'+
+      ' fields5, fields6, fields7,fields8, fields9, fields10, fields11,fields12,'+
+      ' fields13, fields14, fields15,w.titul, f_name, f_size, f_style, f_weight, fillpatt, ffcolor,'+
+      ' bfcolor,tip_group,vid_group,content,cat,vid_g  from '+TABLE_SN+
+      ' w, REPORT_COLOR c where npnumG='+ IntToStr(i)+
+      ' and c.numg=w.numg and c.titul is null and report=''6GR'' and (w.titul is null or  w.titul=''V'') '+
+      ' and ses='+Ses+     '    order by num,npnumG,str';
+
+
+    with qData do
+
+//    try
+begin
+      Execute;
+
+     while not Eof do
+     begin
+       f_content   := Field('CONTENT');
+       f_str       := Field('STR');
+       f_titul     := Field('titul');
+       f_fname     := Field('f_name');
+       f_fsize     := Field('f_size');
+       f_fstyle    := Field('f_style');
+       f_fweight   := Field('f_weight');
+       f_fillpatt  := Field('fillpatt');
+       f_ffcolor   := Field('ffcolor');
+       f_bfcolor   := Field('bfcolor');
+       f_tip_group := Field('tip_group');
+       f_vid_group := Field('vid_group');
+       f_numg      := Field('NUMG');
+       f_cat       := Field('cat');
+       f_vid_g     := Field('vid_g');
+
+
+       TabGrid[0,0] := '';//Field('NUM');
+
+       if f_str='' then  begin   //  удаляем символ "перевод строки" в COMM, ADR
+           vvv := Field('FIELDS2');
+           TabGrid[0,1] := StringReplace(vvv, #13#10, ' ', [rfReplaceAll]);
+           end
+       else  TabGrid[0,1] := Field('FIELDS2');
+
+
+       TabGrid[0,2] := Field('FIELDS3');
+       TabGrid[0,3] := Field('FIELDS4');
+       TabGrid[0,4] := Field('FIELDS5');
+       TabGrid[0,5] := Field('FIELDS6');
+       TabGrid[0,6] := Field('FIELDS7');
+       TabGrid[0,7] := Field('FIELDS8');
+       TabGrid[0,8] := Field('FIELDS9');
+if res='O'  then begin
+        TabGrid[0,9] := Field('FIELDS11');
+       TabGrid[0,10] := Field('FIELDS12');
+       TabGrid[0,11] := Field('FIELDS13');
+       TabGrid[0,12] := Field('FIELDS14');
+       TabGrid[0,13] := Field('FIELDS15');
+       end
+else begin  // (res='G') or(res='C') or (res='E') or (res='P') or (res='B') or (res='S')  or (res='EPB')
+       TabGrid[0,9] := Field('FIELDS10');
+       TabGrid[0,10] := Field('FIELDS11');
+       TabGrid[0,11] := Field('FIELDS12');
+       TabGrid[0,12] := Field('FIELDS13');
+       if (res='C')  or (res='E') or (res='P') or (res='B') or (res='S')  or (res='EPB') then
+         TabGrid[0,13] := Field('FIELDS15')
+       else begin
+        TabGrid[0,13] := Field('FIELDS14') ;
+        TabGrid[0,14] := Field('FIELDS15');
+       end;
+     end;
+
+
+
+//   Initialization:
+  if  f_titul='Y' then    begin      //  если титул
+      Tip_Group := f_tip_group;   Vid_Group := f_vid_group;
+      First_Row_Gr := Row;   //  первая строка в группе=титул
+      Inc(nn_Titul_Page);    //  кол. заголовков групп на странице
+      end;
+
+  if   (f_vid_g = '' )  and  ( nn_VidG = 0 ) then   //  для затенения заголовка группы (ZLO)
+        Last_Row_Shadow := Row;
+
+
+// if (res='C') or (res='E') or (res='P') or (res='B') or (res='S') then
+
+  if   f_titul ='V'  then  begin       //  для ГКЗ по компонентам где несколько видов газа и одна строка-категория
+        v_pred_Row_Gr_G := First_Row_Gr_G;  //  сохранить начало пред. группы газа
+        First_Row_Gr_G := Row;
+        end;
+
+
+//  if  ( Copy(f_str,2,2) ='11') then    //
+  if  (f_str='01') then     //*
+  begin
+     if   (f_vid_g <> '')  and  ( StrToInt(f_vid_g) > nn_VidG ) then
+     begin
+        nn_VidG := StrToInt(f_vid_g);
+        Row_GKZ  := 0;  STR_min  := 0;  STR_max  := 0;
+        //    Row_STR  := 0;  // номер текущей строки
+        n_Str  := 0;    // индекс строки для заполнения массива Line_Cat_Row
+       // for J:=0 TO 6 DO  Line_Cat_Row[J]:=0;
+          for J:=0 TO 8 DO  Line_Cat_Row[J]:=0;
+      end;
+      if (res='G') or (res='C') or (res='E') or (res='P') or (res='B') or (res='S') or (res='EPB') then
+       S := TabGrid[0,11]  //  это поле "Протокол ГКЗ"
+       else  S := TabGrid[0,10];  //  это поле "Протокол ГКЗ"
+//      S := TabGrid[0,12];  //  это поле "Протокол ГКЗ"
+      STR_min := Row;      //  первая строка в группе с категорией
+      if  (Trim(S)<>'')  then   Row_GKZ := Row;     //  номер строки с ГКЗ, если не null
+  end;
+
+  if (f_str<>'') and (f_str<>'99') then   begin    //  это поле STR
+     Row_STR := StrToInt(f_str);  // текущий номер строки с категорией
+
+
+////   Row_STR := StrToInt(Copy(f_str,2,2));
+
+       S := TabGrid[0,2];   //  это поле "Категория"
+       if (Trim(S)<>'') then begin
+          Inc(n_Str);
+          Line_Cat_Row[n_str] := Row;  STR_max := Row;
+          end
+       else
+          if  (f_cat <> '')  then
+             STR_max := Row;     //  макс. номер строки с STR<>'' и категория null (для обводки)
+
+     end;
+
+//  Last_Row_Gr := Row;
+//end of initialization
+
+//---  Formatting
+vRange:= Worksheet.Range['A'+IntToStr(size_shapka+Row),Worksheet.Cells.Item[Row+size_shapka,C]];
+
+   vRange.Value:= TabGrid;
+//-- переопределение Range для форматирования без ГКЗ
+//vRange:= Worksheet.Range['A'+IntToStr(size_shapka+Row),Worksheet.Cells.Item[Row+size_shapka,C-n_Col_Minus]];
+
+
+
+
+   if (f_content = 'Y') and (f_titul = 'Y') then  begin  //формирование содержания
+
+      Inc(Row_OGL);   fill_probel := '';
+      for J:=0 to (StrToInt(f_numg)-1) DO fill_probel := fill_probel + ' ';
+//*fill_probel:=fill_probel + TabGrid[0,0] + fill_str;
+      fill_probel:=fill_probel + TabGrid[0,1] + fill_str;
+      WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,2].Value := fill_probel; // + TabGrid[0,0] + fill_str;
+      WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,2].Rows.AutoFit;
+      WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,3].Value := nn_Page+1;
+// WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,4].Value := Size_Page[nn_Titul_page];
+// WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,5].Value :=  nn_Titul_page;
+// WorkSheet_OGL.Cells.Item[Row_OGL+Line_OGL,6].Value :=  nn_Row_page;
+      vRange_OGL := WorkSheet_OGL.Range['B'+IntToStr(Line_OGL+Row_OGL),'B'+IntToStr(Line_OGL+Row_OGL)];
+       if   f_fstyle= 'italic' then
+         vRange_OGL.Font.Italic := true
+       else   vRange_OGL.Font.Italic := false;
+       if   f_fweight= 'bold' then
+         vRange_OGL.Font.Bold:=true
+       else  vRange_OGL.Font.Bold:=false;
+
+       vRange_OGL.Font.Size:=f_fsize;
+       vRange_OGL.Font.Name:=f_fname;
+      end;    //  конец формирования содержания
+
+
+
+
+{
+ WorkSheet.Cells.Item[Row+11,15].Value := Size_Page[nn_Titul_page];
+ WorkSheet.Cells.Item[Row+11,16].Value := nn_Titul_page;
+ WorkSheet.Cells.Item[Row+11,17].Value := nn_Row_page;
+ WorkSheet.Cells.Item[Row+11,18].Value := nn_page;
+ }
+   if nn_Row_page>=Size_Page[nn_Titul_page] then   begin
+          Inc(nn_Page);  nn_Row_page :=0;   nn_Titul_page :=0;
+          end
+          else   Inc(nn_Row_Page);
+
+
+if  f_titul = 'Y' then
+    vRange.Rows.AutoFit;
+if   f_fstyle = 'italic' then
+    vRange.Font.Italic := true
+    else   vRange.Font.Italic := false;
+if   f_fweight = 'bold' then
+    vRange.Font.Bold:=true
+   else  vRange.Font.Bold:=false;
+
+   vRange.Font.Size:=f_fsize;
+   vRange.Font.Name:=f_fname;    //'MS Sans Serif';
+
+
+
+
+
+   v_cell:= Worksheet.Range['D'+IntToStr(size_shapka+Row),'J'+IntToStr(size_shapka+Row) ];//Worksheet.Cells.Item[Row+size_shapka,J]];
+
+
+  if  f_titul='R' then  //  если титул ='R', это рентабельные запасы
+    begin
+
+//     if   f_fweight = 'bold' then   begin
+         v_cell.Font.Bold:=true;
+//         v_cell.Font.Bold:=false;
+//         v_cell.Font.Size:=StrToInt(f_fsize)+1; end;
+         v_cell.Font.Size:=f_fsize; //end;
+
+     v_cell.HorizontalAlignment := xlRight;
+    // else
+
+    end
+  else   begin
+      v_cell.HorizontalAlignment := xlLeft;
+      v_cell.IndentLevel:= 1;
+       end;
+
+
+    if  f_titul='V' then    //  если титул ='V', значит это вид газа и его нужно выделить
+    begin
+      vRange.Font.Italic := true;
+//      vRange.Font.Size := ;
+         end;
+
+
+//   if (Vid_Group<>'NZO')   then
+//   if (Vid_Group='PR') or (Vid_Group='MVN') or (Vid_Group='PSRF')  or (Vid_Group='VF')  then
+//      vRange.Rows.AutoFit;
+//end of Formatting
+
+
+
+
+     if   (f_vid_g <> '')   then
+          if   ( StrToInt(f_vid_g) > nn_VidG ) then
+       begin
+//   Форматирование ГКЗ   // and (Tip_Group='W')
+
+       Format_GKZ;
+
+// конец форматированию ГКЗ
+
+// обводка категорий и запасов   и выделение групп затенением  //  and (Tip_Group='W')
+
+
+       Border_CAT;
+
+
+// конец обводки категорий
+       end;
+
+       Last_Row_Gr := Row;
+//end of initialization
+       Inc(Row);
+       Next;
+     end;
+
+
+ //**
+//       except
+
+//      on E:EOracleError do ShowMessage(E.Message);
+
+//    end;
+    end;   //with qData do
+
+
+
+     v_pred_Row_Gr_G := First_Row_GR_G;      //  номер строки пред.группы газа - для форматир. ГКЗ в случае одной строки категории когда она последняя в отчете
+
+{  формат-е и обводка для последней группы}
+//   Форматирование ГКЗ   // and (Tip_Group='W')
+
+   Format_GKZ;
+
+// конец форматированию ГКЗ
+
+
+// обводка категорий и запасов   и выделение групп затенением  //  and (Tip_Group='W')
+
+   Border_CAT;
+
+// конец обводки категорий
+
+
+//  выделение групп затенением  //  and (Tip_Group='W')
+
+
+  if (Vid_Group='ZLO')   then  begin
+//       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_GKZ+IntToStr(size_shapka+Last_Row_Shadow)];
+       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_BORDER +IntToStr(size_shapka+Last_Row_Shadow)];
+       vRange.Interior.ColorIndex := 0;
+       vRange.Interior.Pattern := xlGray16;
+       vRange.Interior.PatternColorIndex := 15;
+       end;
+  if (Vid_Group='MVN')   then  begin
+//       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_GKZ+IntToStr(size_shapka+Last_Row_Gr)];
+       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_BORDER+IntToStr(size_shapka+Last_Row_Gr)];
+       vRange.Interior.ColorIndex := 0;
+       vRange.Interior.Pattern := xlGray8;
+       vRange.Interior.PatternColorIndex := 15;
+       end;
+  if (Vid_Group='PR')    then  begin
+//       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_GKZ+IntToStr(size_shapka+Last_Row_Gr)];
+       vRange:= Worksheet.Range['A'+IntToStr(size_shapka+First_Row_Gr),pos_BORDER+IntToStr(size_shapka+Last_Row_Gr)];
+       vRange.Interior.ColorIndex := 0;
+       vRange.Interior.Pattern := xlGray16;
+       vRange.Interior.PatternColorIndex := 15;
+        end;
+//   конец затенения
+
+
+
+
+   end;   //  for i
+
+
+
+
+
+
+{
+  Row_OGL := 3+Row_OGL;
+  Range_OGL := WorkSheet_OGL.Range['A1','C'+IntToStr(Row_OGL)];
+  Range :=   WorkSheet.Range['A'+IntToStr(11+Row),'C'+IntToStr(11+Row+Row_OGL)];
+  Range.Value := Range_OGL.Value;
+}
+
+ Worksheet.Range['A1','A1'].Select;
+
+
+{   Sheets("Форма 06-гр               Нефть").Select
+    Range("K2617").Select
+    ActiveSheet.Paste
+    Range("C2620:J2620").Select
+    Application.CutCopyMode = False
+    With Selection
+        .WrapText = False
+        .Orientation = 0
+        .AddIndent = False
+        .ShrinkToFit = False
+        .MergeCells = True
+    End With
+    Rows("2620:2626").Select
+    Range("B2620").Activate
+    With Selection
+        .VerticalAlignment = xlTop
+        .WrapText = False
+        .Orientation = 0
+        .AddIndent = False
+        .ShrinkToFit = False
+    End With
+    Selection.Rows.AutoFit
+
+--  Page Break
+    ActiveWindow.SelectedSheets.HPageBreaks.Add Before:=ActiveCell
+
+--   PasteSpecial
+    Selection.Copy
+    Range("K2623:K2626").Select
+    Application.CutCopyMode = False
+    Selection.Copy
+    Range("K2604:K2609").Select
+    Selection.PasteSpecial Paste:=xlFormats, Operation:=xlNone, SkipBlanks:= _
+        False, Transpose:=False
+    Application.CutCopyMode = False
+
+    }
+
+{CenterFooter Property Example
+
+This example prints the workbook name and page number at the bottom of each page.
+
+Worksheets("Sheet1").PageSetup.CenterFooter = "&F page &P"
+Worksheets("Sheet1").PageSetup.LeftFooter = "&P"
+
+}
+
+
+{
+ActiveWindow.View = xlPageBreakPreview
+
+For pb = 1 To Worksheets(1).HPageBreaks.Count
+Range(Worksheets(1).HPageBreaks(pb).Location.Address()).Activate
+Range(ActiveCell.Offset(-1, 0), ActiveCell.Offset(-1, 12)).Select
+
+ With Selection.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Weight = xlHairline
+        .ColorIndex = 15
+ End With
+Next pb
+ActiveWindow.View = xlNormalView
+}
+
+
+
+      Screen.Cursor     := crDefault;
+
+
+//         NextButton.Enabled := True;
+//         WaitExport.Caption:= 'Выгрузка данных завершена!' ;
+
+
+
+
+   TabGrid := Unassigned;
+
+
+//  XLApp.Application.EnableEvents:=true;   XLApp.Application.DisplayAlerts[0]:=true;
+
+   XLApp.Application.Visible[LOCALE_USER_DEFAULT]:=true;
+
+//?  Worksheet.Activate(LOCALE_USER_DEFAULT);
+
+{    WorkSheet.EnableSelection := 0;
+    WorkSheet.UnProtect('123', 1);
+    WorkSheet_OGL.EnableSelection := 0;
+    WorkSheet_OGL.UnProtect('123', 1);
+
+ }
+
+
+//   formstart.Label1.Visible := false;
+formstart.Label1.Caption := 'Загрузка закончена.';
+
+ qData.Close;
+
+    formstart.ProgressBar1.Position := formstart.ProgressBar1.Max;
+
+
+     except
+
+  on E : Exception do
+      ShowMessage(E.ClassName+' поднята ошибка, с сообщением : '+E.Message);
+
+
+    end;
+
+
+
+
+//   XLApp.Application.Visible[LOCALE_USER_DEFAULT]:=true;
+
+
+
+end;      // -- To_EXCEL06GR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{----------------------------------}
+procedure TForm06gr.ExportBtnClick(Sender: TObject);
+begin
+
+  To_EXCEL06GR;
+
+
+end;
+
+
+
+{----------------------------------}
+procedure TForm06gr.XLAppWorkbookDeactivate(Sender: TObject; var Wb: OleVariant);
+begin
+   XLApp.Disconnect;
+end;
+
+{----------------------------------}
+procedure TForm06gr.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+
+XLApp.Disconnect;
+
+// XLApp.Quit;
+ XLApp := nil;
+
+{
+  if MessageDlg('Close application ?', mtConfirmation,
+    [mbYes, mbNo], 0) = mrYes then
+    Action := caFree
+  else
+    Action := caNone;
+ }
+
+
+{
+
+   XLApp.Disconnect;
+
+   try
+
+
+   XLApp.Quit;
+   XLApp:=nil;
+//   XLApp := null;
+except
+   showmessage('Аварийное закрытие EXCEL.');
+
+end;
+
+// XLApp:=Unassigned;
+ }
+
+end;
+
+{----------------------------------}
+procedure TForm06gr.SpeedButton1Click(Sender: TObject);
+begin
+ShortDateFormat := 'd-m-y';
+odOpen.FileName:= DateToStr(Date)+'.xls' ;
+   if odOpen.Execute then
+  begin
+   PathExportFile.Text:=odOpen.FileName;
+    PathExportFile.SetFocus;
+{    ExportBtn.SetFocus;//  .SetFocus;}
+  end;
+end;
+
+{----------------------------------}
+procedure TForm06gr.PathExportFileExit(Sender: TObject);
+begin
+ if lastDelimiter(' ',PathExportFile.Text)>0 then  begin
+        showmessage('Проверьте, пожалуйста: названия директорий и файла должны быть без пробелов.');
+        PathExportFile.SetFocus;
+        abort;
+  end;
+end;
+
+
+
+{----------------------------------}
+procedure TForm06gr.res_editDblClick(Sender: TObject);
+begin
+  RES_CHANGE(res_edit.text);
+
+end;
+
+{----------------------------------}
+procedure TForm06gr.ses_editDblClick(Sender: TObject);
+begin
+   qData.Close;
+   qData.SQL.Clear;
+   qData.SQL.Text:='select distinct ses as SES_ORA from '+TABLE_SN;
+   qData.Execute;
+   ses_edit.Text:= qData.Field('SES_ORA');
+   qData.Close;
+end;
+
+
+

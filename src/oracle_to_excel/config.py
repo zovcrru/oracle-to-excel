@@ -14,6 +14,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import NotRequired, TypedDict
+from xmlrpc.client import Boolean
 
 try:
     from dotenv import load_dotenv
@@ -31,15 +32,11 @@ class ConfigDict(TypedDict):
     """Структура конфигурации приложения."""
 
     # Обязательные параметры
-    ORACLE_USER: str
-    ORACLE_PASSWORD: str
-    ORACLE_DSN: str
+    DB_CONNECT_URI: str
 
     # Опциональные параметры (NotRequired из Python 3.11+)
-    POOL_MIN: NotRequired[int]
-    POOL_MAX: NotRequired[int]
-    POOL_INCREMENT: NotRequired[int]
     LOG_LEVEL: NotRequired[str]
+    LOG_FILE: NotRequired[str]
     OUTPUT_DIR: NotRequired[str]
     FETCH_ARRAY_SIZE: NotRequired[int]
     CHUNK_SIZE: NotRequired[int]
@@ -49,26 +46,33 @@ class ConfigDict(TypedDict):
 
 
 # Константы для валидации
+# REQUIRED_CONFIG: frozenset[str] = frozenset(
+#     {
+#         'ORACLE_USER',
+#         'ORACLE_PASSWORD',
+#         'ORACLE_DSN',
+#     }
+# )
+
 REQUIRED_CONFIG: frozenset[str] = frozenset(
     {
-        'ORACLE_USER',
-        'ORACLE_PASSWORD',
-        'ORACLE_DSN',
+        'DB_CONNECT_URI',
     }
 )
 
 # Значения по умолчанию с использованием frozendict (immutable)
-DEFAULT_CONFIG: Mapping[str, int | str] = {
-    'POOL_MIN': 2,
-    'POOL_MAX': 5,
-    'POOL_INCREMENT': 1,
+DEFAULT_CONFIG: Mapping[str, int | str | Boolean] = {
     'LOG_LEVEL': 'INFO',
+    'LOG_FILE': './logs/oracle_export.log',
     'OUTPUT_DIR': './exports',
     'FETCH_ARRAY_SIZE': 1000,
     'CHUNK_SIZE': 5000,
     'QUERY_TIMEOUT': 300,
     'MAX_COLUMN_WIDTH': 50,
-    'COLUMN_WIDTH_SAMPLE_SIZE': 1000,
+    'ENABLE_BATCH_PROCESSING': True,
+    'BATCH_SIZE': 50000,
+    'SHOW_PROGRESS_BAR': True,
+    'PROGRESS_UPDATE_INTERVAL': 100,
 }
 
 VALID_LOG_LEVELS: frozenset[str] = frozenset(
@@ -110,8 +114,7 @@ def load_config(  # noqa: C901
         'admin'
     """
     # Получаем логгер (или None если логирование еще не настроено)
-    logger = get_logger('config') if use_logging else None
-
+    logger = get_logger() if use_logging else None
     env_path = Path(env_file)
 
     # Pattern matching для проверки существования файла (Python 3.10+)
@@ -133,7 +136,7 @@ def load_config(  # noqa: C901
             raise FileNotFoundError(error_msg)
 
     # Загружаем все переменные
-    config: dict[str, str | int] = {}
+    config: dict[str, str | int | bool] = {}
 
     # Загружаем обязательные параметры
     missing_params = []
@@ -494,17 +497,33 @@ def print_config_summary(
     output_lines.append('=' * 50)
 
     # Группируем параметры
-    db_params = ['ORACLE_USER', 'ORACLE_PASSWORD', 'ORACLE_DSN']
-    pool_params = ['POOL_MIN', 'POOL_MAX', 'POOL_INCREMENT']
-    query_params = ['FETCH_ARRAY_SIZE', 'CHUNK_SIZE', 'QUERY_TIMEOUT']
-    excel_params = ['MAX_COLUMN_WIDTH', 'COLUMN_WIDTH_SAMPLE_SIZE']
-    other_params = ['LOG_LEVEL', 'OUTPUT_DIR']
+    db_params = ['DB_CONNECT_URI']
+    query_params = [
+        'FETCH_ARRAY_SIZE',
+        'CHUNK_SIZE',
+        'QUERY_TIMEOUT',
+    ]
+    excel_params = [
+        'MAX_COLUMN_WIDTH',
+        'COLUMN_WIDTH_SAMPLE_SIZE',
+    ]
+    performance_params = [
+        'ENABLE_BATCH_PROCESSING',
+        'BATCH_SIZE',
+    ]
+    other_params = [
+        'LOG_LEVEL',
+        'LOG_FILE',
+        'OUTPUT_DIR',
+        'SHOW_PROGRESS_BAR',
+        'PROGRESS_UPDATE_INTERVAL',
+    ]
 
     sections = [
         ('База данных', db_params),
-        ('Connection Pool', pool_params),
         ('Параметры запросов', query_params),
         ('Параметры Excel', excel_params),
+        ('Параметры производительности', performance_params),
         ('Прочее', other_params),
     ]
 
@@ -530,7 +549,7 @@ def print_config_summary(
     # Выводим через логгер или print
     full_output = '\n'.join(output_lines)
     if logger:
-        logger.info('Svodka konfiguracii:')
+        logger.info('Конфигурация:')
         for line in output_lines:
             logger.info(line)
     else:

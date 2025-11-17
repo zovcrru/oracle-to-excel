@@ -37,7 +37,7 @@
         "${env:windir}\\System32\\cmd.exe"
       ],
       "args": [
-        "/k C:\\Utils\\System\\cmder\\vendor\\init.bat"
+        "/k D:\\Utils\\System\\cmder\\vendor\\init.bat"
       ],
       "icon": "terminal-cmd",
     }
