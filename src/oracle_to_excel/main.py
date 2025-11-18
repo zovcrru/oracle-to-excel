@@ -55,7 +55,7 @@ def main() -> int:
         logger.error('Невалидный connection string: %s', error_message)
         return 1
 
-    logger.info('Connection string прошел валидацию')
+    logger.info('Connection string %s прошел валидацию', connection_string)
 
     # Подключаемся к БД и получаем информацию
     try:

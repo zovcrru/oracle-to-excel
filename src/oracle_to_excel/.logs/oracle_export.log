@@ -262,3 +262,135 @@ Traceback (most recent call last):
 psycopg.OperationalError: [Errno 10109] getaddrinfo failed
 2025-11-18 19:50:59 - oracle_exporter.database - WARNING - Ошибка в context manager: [Errno 10109] getaddrinfo failed
 2025-11-18 19:50:59 - oracle_exporter - ERROR - Ошибка при подключении к БД: [Errno 10109] getaddrinfo failed
+2025-11-18 19:58:03 - oracle_exporter - INFO - Конфигурация загружена.
+2025-11-18 19:58:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 19:58:03 - oracle_exporter - INFO - КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+2025-11-18 19:58:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 19:58:03 - oracle_exporter - INFO - 
+2025-11-18 19:58:03 - oracle_exporter - INFO - База данных:
+2025-11-18 19:58:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 19:58:03 - oracle_exporter - INFO -   DB_TYPE                      sqlite
+2025-11-18 19:58:03 - oracle_exporter - INFO -   DB_CONNECT_URI               ***
+2025-11-18 19:58:03 - oracle_exporter - INFO - 
+2025-11-18 19:58:03 - oracle_exporter - INFO - Параметры запросов:
+2025-11-18 19:58:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 19:58:03 - oracle_exporter - INFO -   FETCH_ARRAY_SIZE             1000
+2025-11-18 19:58:03 - oracle_exporter - INFO -   CHUNK_SIZE                   5000
+2025-11-18 19:58:03 - oracle_exporter - INFO -   QUERY_TIMEOUT                300
+2025-11-18 19:58:03 - oracle_exporter - INFO - 
+2025-11-18 19:58:03 - oracle_exporter - INFO - Параметры Excel:
+2025-11-18 19:58:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 19:58:03 - oracle_exporter - INFO -   MAX_COLUMN_WIDTH             50
+2025-11-18 19:58:03 - oracle_exporter - INFO -   COLUMN_WIDTH_SAMPLE_SIZE     1000
+2025-11-18 19:58:03 - oracle_exporter - INFO - 
+2025-11-18 19:58:03 - oracle_exporter - INFO - Прочее:
+2025-11-18 19:58:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 19:58:03 - oracle_exporter - INFO -   LOG_LEVEL                    INFO
+2025-11-18 19:58:03 - oracle_exporter - INFO -   OUTPUT_DIR                   ./exports
+2025-11-18 19:58:03 - oracle_exporter - INFO - 
+2025-11-18 19:58:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 19:58:03 - oracle_exporter - INFO - Connection string прошел валидацию
+2025-11-18 19:58:03 - oracle_exporter.database - ERROR - Unsupported database type: sqlite
+2025-11-18 19:58:03 - oracle_exporter.performance - ERROR - Error in oracle_to_excel.database.create_connection after 0.0001s
+Traceback (most recent call last):
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\logger.py", line 329, in wrapper
+    result = func(*args, **kwargs)
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\database.py", line 202, in create_connection
+    raise ValueError('Неподдерживаемый тип БД: %s', db_type)
+ValueError: ('Неподдерживаемый тип БД: %s', 'sqlite')
+2025-11-18 19:58:03 - oracle_exporter.database - WARNING - Ошибка в context manager: ('Неподдерживаемый тип БД: %s', 'sqlite')
+2025-11-18 19:58:03 - oracle_exporter - ERROR - Ошибка при подключении к БД: ('Неподдерживаемый тип БД: %s', 'sqlite')
+2025-11-18 20:04:03 - oracle_exporter - INFO - Конфигурация загружена.
+2025-11-18 20:04:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:04:03 - oracle_exporter - INFO - КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+2025-11-18 20:04:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:04:03 - oracle_exporter - INFO - 
+2025-11-18 20:04:03 - oracle_exporter - INFO - База данных:
+2025-11-18 20:04:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:04:03 - oracle_exporter - INFO -   DB_TYPE                      sqlite
+2025-11-18 20:04:03 - oracle_exporter - INFO -   DB_CONNECT_URI               ***
+2025-11-18 20:04:03 - oracle_exporter - INFO - 
+2025-11-18 20:04:03 - oracle_exporter - INFO - Параметры запросов:
+2025-11-18 20:04:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:04:03 - oracle_exporter - INFO -   FETCH_ARRAY_SIZE             1000
+2025-11-18 20:04:03 - oracle_exporter - INFO -   CHUNK_SIZE                   5000
+2025-11-18 20:04:03 - oracle_exporter - INFO -   QUERY_TIMEOUT                300
+2025-11-18 20:04:03 - oracle_exporter - INFO - 
+2025-11-18 20:04:03 - oracle_exporter - INFO - Параметры Excel:
+2025-11-18 20:04:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:04:03 - oracle_exporter - INFO -   MAX_COLUMN_WIDTH             50
+2025-11-18 20:04:03 - oracle_exporter - INFO -   COLUMN_WIDTH_SAMPLE_SIZE     1000
+2025-11-18 20:04:03 - oracle_exporter - INFO - 
+2025-11-18 20:04:03 - oracle_exporter - INFO - Прочее:
+2025-11-18 20:04:03 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:04:03 - oracle_exporter - INFO -   LOG_LEVEL                    INFO
+2025-11-18 20:04:03 - oracle_exporter - INFO -   OUTPUT_DIR                   ./exports
+2025-11-18 20:04:03 - oracle_exporter - INFO - 
+2025-11-18 20:04:03 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:04:03 - oracle_exporter - INFO - Connection string прошел валидацию
+2025-11-18 20:04:03 - oracle_exporter.performance - ERROR - Error in oracle_to_excel.database.create_connection after 0.0001s
+Traceback (most recent call last):
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\logger.py", line 329, in wrapper
+    result = func(*args, **kwargs)
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\database.py", line 210, in create_connection
+    return _create_sqlite_connection(
+        connection_string,
+        read_only=read_only,
+        timeout=timeout,
+    )
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\database.py", line 272, in _create_sqlite_connection
+    conn = sqlite3.connect(
+        connection_string,
+        timeout=timeout,
+        autocommit=False,
+    )
+sqlite3.OperationalError: unable to open database file
+2025-11-18 20:04:03 - oracle_exporter.database - WARNING - Ошибка в context manager: unable to open database file
+2025-11-18 20:04:03 - oracle_exporter - ERROR - Ошибка при подключении к БД: unable to open database file
+2025-11-18 20:05:36 - oracle_exporter - INFO - Конфигурация загружена.
+2025-11-18 20:05:36 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:05:36 - oracle_exporter - INFO - КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+2025-11-18 20:05:36 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:05:36 - oracle_exporter - INFO - 
+2025-11-18 20:05:36 - oracle_exporter - INFO - База данных:
+2025-11-18 20:05:36 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:05:36 - oracle_exporter - INFO -   DB_TYPE                      sqlite
+2025-11-18 20:05:36 - oracle_exporter - INFO -   DB_CONNECT_URI               ***
+2025-11-18 20:05:36 - oracle_exporter - INFO - 
+2025-11-18 20:05:36 - oracle_exporter - INFO - Параметры запросов:
+2025-11-18 20:05:36 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:05:36 - oracle_exporter - INFO -   FETCH_ARRAY_SIZE             1000
+2025-11-18 20:05:36 - oracle_exporter - INFO -   CHUNK_SIZE                   5000
+2025-11-18 20:05:36 - oracle_exporter - INFO -   QUERY_TIMEOUT                300
+2025-11-18 20:05:36 - oracle_exporter - INFO - 
+2025-11-18 20:05:36 - oracle_exporter - INFO - Параметры Excel:
+2025-11-18 20:05:36 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:05:36 - oracle_exporter - INFO -   MAX_COLUMN_WIDTH             50
+2025-11-18 20:05:36 - oracle_exporter - INFO -   COLUMN_WIDTH_SAMPLE_SIZE     1000
+2025-11-18 20:05:36 - oracle_exporter - INFO - 
+2025-11-18 20:05:36 - oracle_exporter - INFO - Прочее:
+2025-11-18 20:05:36 - oracle_exporter - INFO - ----------------------------------------
+2025-11-18 20:05:36 - oracle_exporter - INFO -   LOG_LEVEL                    INFO
+2025-11-18 20:05:36 - oracle_exporter - INFO -   OUTPUT_DIR                   ./exports
+2025-11-18 20:05:36 - oracle_exporter - INFO - 
+2025-11-18 20:05:36 - oracle_exporter - INFO - ============================================================
+2025-11-18 20:05:36 - oracle_exporter - INFO - Connection string sqlite://***@None:*** прошел валидацию
+2025-11-18 20:05:36 - oracle_exporter.performance - ERROR - Error in oracle_to_excel.database.create_connection after 0.0001s
+Traceback (most recent call last):
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\logger.py", line 329, in wrapper
+    result = func(*args, **kwargs)
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\database.py", line 210, in create_connection
+    return _create_sqlite_connection(
+        connection_string,
+        read_only=read_only,
+        timeout=timeout,
+    )
+  File "D:\Work\2025\oracle_to_excel\src\oracle_to_excel\database.py", line 272, in _create_sqlite_connection
+    conn = sqlite3.connect(
+        connection_string,
+        timeout=timeout,
+        autocommit=False,
+    )
+sqlite3.OperationalError: unable to open database file
+2025-11-18 20:05:36 - oracle_exporter.database - WARNING - Ошибка в context manager: unable to open database file
+2025-11-18 20:05:36 - oracle_exporter - ERROR - Ошибка при подключении к БД: unable to open database file

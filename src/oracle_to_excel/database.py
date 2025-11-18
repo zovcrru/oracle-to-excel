@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Literal, Protocol
@@ -144,7 +145,11 @@ def detect_db_type(connection_string: ConnectionString) -> DBType:
         case _:
             if ':1521/' in connection_string or ':1521@' in connection_string:
                 return 'oracle'
-            if ':5432/' in connection_string or 'postgresql://' in connection_string.lower():
+            if (
+                ':5432/' in connection_string
+                or 'postgresql://' in connection_string.lower()
+                or ':5433/' in connection_string
+            ):
                 return 'postgresql'
             raise DatabaseTypeDetectionError(
                 f'Не удалось определить тип БД: {connection_string}',
@@ -191,12 +196,23 @@ def create_connection(
     match db_type:
         case 'oracle':
             return _create_oracle_connection(
-                connection_string, read_only=read_only, timeout=timeout
+                connection_string,
+                read_only=read_only,
+                timeout=timeout,
             )
         case 'postgresql':
             return _create_postgresql_connection(
-                connection_string, read_only=read_only, timeout=timeout
+                connection_string,
+                read_only=read_only,
+                timeout=timeout,
             )
+        case 'sqlite':
+            return _create_sqlite_connection(
+                connection_string,
+                read_only=read_only,
+                timeout=timeout,
+            )
+
         case _:
             logger.error('Unsupported database type: %s', db_type)
             raise ValueError('Неподдерживаемый тип БД: %s', db_type)
@@ -243,6 +259,20 @@ def _create_postgresql_connection(
         autocommit=False,
         connect_timeout=timeout,
         options=options,
+    )
+    return conn
+
+
+def _create_sqlite_connection(
+    connection_string: ConnectionString,
+    *,
+    read_only: bool,
+    timeout: int,
+) -> DatabaseConnection:
+    conn = sqlite3.connect(
+        connection_string,
+        timeout=timeout,
+        autocommit=False,
     )
     return conn
 
