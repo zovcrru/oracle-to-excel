@@ -12,31 +12,19 @@
 - Возврат словаря с конфигурацией или выброс исключения при отсутствии обязательных параметров
 
 ```python
-REQUIRED_CONFIG: frozenset[str] = frozenset({'DB_TYPE', 'DB_CONNECT_URI'})
-
-DEFAULT_CONFIG: Mapping[str, int | str] = {
+REQUIRED_CONFIG = ['ORACLE_USER', 'ORACLE_PASSWORD', 'ORACLE_DSN']
+OPTIONAL_CONFIG = {
+    'POOL_MIN': 2,
+    'POOL_MAX': 5,
+    'POOL_INCREMENT': 1,
     'LOG_LEVEL': 'INFO',
     'OUTPUT_DIR': './exports',
     'FETCH_ARRAY_SIZE': 1000,
     'CHUNK_SIZE': 5000,
     'QUERY_TIMEOUT': 300,
     'MAX_COLUMN_WIDTH': 50,
-    'COLUMN_WIDTH_SAMPLE_SIZE': 1000,
+    'COLUMN_WIDTH_SAMPLE_SIZE': 1000
 }
-
-VALID_LOG_LEVELS: Final[frozenset[str]] = frozenset(
-    {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'},
-)
-
-# VALID_DB_TYPES помечен Final и как frozenset[str], чтобы типизатор понимал неизменяемость и тип
-# содержимого
-VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
-    {
-        'oracle',
-        'postgresql',
-        'sqlite',
-    }
-)
 ```
 
 **Функция `validate_config(config: dict) -> bool`**
@@ -64,47 +52,27 @@ VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
 
 #### **Модуль 3: Управление подключениями к БД (`database.py`)**
 
-**Функция `create_connection(
-    connection_string: ConnectionString,
-    db_type: DBType | None = None,
-    *,
-    read_only: bool = False,
-    timeout: int = 30,
-) -> DatabaseConnection:`**
+**Функция `create_connection_pool(config: dict) -> oracledb.ConnectionPool`**
+- Создание пула подключений через `oracledb.create_pool()`
+- Параметры: min, max, increment из конфигурации
+- Установка `getmode=oracledb.POOL_GETMODE_WAIT` для ожидания свободного соединения
+- Возврат объекта пула или выброс исключения при ошибке подключения
 
-**Функция `def get_connection(
-    connection_string: ConnectionString,
-    db_type: DBType | None = None,
-    *,
-    read_only: bool = False,
-    timeout: int = 30,
-) -> Generator[
-    DatabaseConnection,
-    None,
-    None,
-]:`**
+**Функция `get_connection(pool: oracledb.ConnectionPool) -> oracledb.Connection`**
+- Получение подключения из пула
+- Установка `read_only=True` для безопасности
+- Настройка `autocommit=False` (не требуется commit для SELECT)
+- Возврат объекта подключения
 
-**Функция `close_connection(
-    connection: DatabaseConnection | None,
-) -> None:`**
+**Функция `close_pool(pool: oracledb.ConnectionPool) -> None`**
+- Корректное закрытие всех подключений в пуле
+- Логирование процесса закрытия
+- Обработка возможных исключений при закрытии
 
-**Функция `get_db_info(
-    connection: DatabaseConnection,
-    db_type: DBType,
-) -> dict[
-    str,
-    str | int,
-]:
-    """
-    Получает информацию о БД.
-
-    Args:
-        connection: Объект подключения к БД.
-        db_type: Тип БД.
-
-    Returns:
-        Словарь с информацией о БД.
-    """`**
+**Функция `test_connection(config: dict) -> bool`**
+- Проверка подключения к БД перед основной работой
+- Выполнение простого запроса `SELECT 1 FROM DUAL`
+- Возврат True при успехе или False при ошибке
 
 ---
 
@@ -506,7 +474,9 @@ python main.py -t MY_TABLE -s SES001 --profile
 ---
 
 ### Ключевые улучшения в новом плане
-1. **Streaming обработка**: Генератор данных с `fetchmany()` для эффективной работы с большими датасетами
+
+1. **Connection Pool**: Полноценная реализация пула подключений для масштабируемости
+2. **Streaming обработка**: Генератор данных с `fetchmany()` для эффективной работы с большими датасетами
 3. **Модульная архитектура Excel**: Разделение ответственности на отдельные функции
 4. **Расширенная обработка ошибок**: Специфичные обработчики ORA-кодов с retry и jitter
 5. **Оптимизация производительности**: Расчет ширины колонок на sample, настройка arraysize
@@ -519,7 +489,5 @@ python main.py -t MY_TABLE -s SES001 --profile
 12. **Полная документация**: Docstrings, README, примеры использования
 
 ---
-Используй все фичи Python 3.14, в аргументах функций после последнего элемента ставь запятую,
-в logging не используй f-string
-Use `logging.exception` instead of `logging.error`
 не используй # type: ignore[literal-required]
+

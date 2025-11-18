@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "tqdm>=4.66.0",
     "psutil>=5.9.0",
+    "psycopg>=3.2.12",
 ]
 
 [project.optional-dependencies]
@@ -112,7 +113,7 @@ ignore = [
 ]
 external = ["WPS"]
 unfixable = ["B"]
-allowed-confusables = ["Н", "с", "е","р", "о", "б"]
+allowed-confusables = ["В", "Н", "с", "е","р", "о", "б"]
 
 #flake8-import-conventions.banned-from = ["ast"]
 flake8-quotes.inline-quotes = "single"

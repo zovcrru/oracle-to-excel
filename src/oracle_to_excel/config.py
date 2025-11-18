@@ -13,7 +13,7 @@ import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import Final, NotRequired, TypedDict, cast
 from urllib.parse import urlparse
 
 from oracle_to_excel.logger import get_logger
@@ -29,10 +29,10 @@ except ImportError:
 class ConfigDict(TypedDict):
     """Структура конфигурации приложения."""
 
-    DB_TYPE: str
+    DB_TYPE: object
     DB_CONNECT_URI: str
-    LOG_LEVEL: NotRequired[str]
-    OUTPUT_DIR: NotRequired[str]
+    LOG_LEVEL: NotRequired[object]  # было NotRequired[str]
+    OUTPUT_DIR: NotRequired[object]
     FETCH_ARRAY_SIZE: NotRequired[int]
     CHUNK_SIZE: NotRequired[int]
     QUERY_TIMEOUT: NotRequired[int]
@@ -52,12 +52,26 @@ DEFAULT_CONFIG: Mapping[str, int | str] = {
     'COLUMN_WIDTH_SAMPLE_SIZE': 1000,
 }
 
-VALID_LOG_LEVELS: frozenset[str] = frozenset({'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'})
+VALID_LOG_LEVELS: Final[frozenset[str]] = frozenset(
+    {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'},
+)
 
-VALID_DB_TYPES: frozenset[str] = frozenset({'oracle', 'postgresql', 'sqlite'})
+# VALID_DB_TYPES помечен Final и как frozenset[str], чтобы типизатор понимал неизменяемость и тип
+# содержимого
+VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        'oracle',
+        'postgresql',
+        'sqlite',
+    }
+)
 
 
-def load_config(env_file: str = '.env', *, use_logging: bool = True) -> ConfigDict:
+def load_config(
+    env_file: str = '.env',
+    *,
+    use_logging: bool = True,
+) -> ConfigDict:
     """
     Загружает конфигурацию из .env файла.
 
@@ -160,7 +174,10 @@ def _parse_int_param(
 
 
 def _log_parse_warning(
-    param_name: str, value: str | None, default: int, logger: logging.Logger | None
+    param_name: str,
+    value: str | None,
+    default: int,
+    logger: logging.Logger | None,
 ) -> None:
     """Логирует предупреждение о некорректном значении параметра."""
     error_msg = (
@@ -193,14 +210,19 @@ def _mask_sensitive_data(
         logger.debug('Замаскировано %d чувствительных параметров', masked_count)
 
 
-def _get_masked_value(*, value: str | int | bool) -> str:
+def _get_masked_value(
+    *,
+    value: str | int | bool,
+) -> str:
     """Возвращает замаскированное значение."""
     if isinstance(value, str) and '://' in value:
         return _mask_connection_string(value)
     return '***'
 
 
-def _mask_connection_string(connection_string: str) -> str:
+def _mask_connection_string(
+    connection_string: str,
+) -> str:
     """Маскирует connection string, оставляя схему и хост."""
     try:
         parsed = urlparse(connection_string)
@@ -211,7 +233,8 @@ def _mask_connection_string(connection_string: str) -> str:
 
 
 def validate_config(
-    config: ConfigDict, logger: logging.Logger | None = None
+    config: ConfigDict,
+    logger: logging.Logger | None = None,
 ) -> tuple[bool, list[str]]:
     """Валидирует параметры конфигурации."""
     errors: list[str] = []
@@ -238,7 +261,9 @@ def validate_config(
 
 
 def _validate_required_params(
-    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Проверяет наличие обязательных параметров."""
     for param in REQUIRED_CONFIG:
@@ -249,29 +274,42 @@ def _validate_required_params(
                 logger.error(error)
 
 
-def _validate_db_type(config: ConfigDict, errors: list[str], logger: logging.Logger | None) -> None:
+def _validate_db_type(
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None = None,
+) -> None:
     """Валидирует тип базы данных."""
-    db_type = config.get('DB_TYPE', '')
+    # DB_TYPE обязателен и всегда str по аннотации TypedDict
+    db_type = config['DB_TYPE']
     if not isinstance(db_type, str):
         msg = 'DB_TYPE должен быть строкой'
         errors.append(msg)
-        if logger:
+        if logger is not None:
             logger.error(msg)
         return
+    # Использован casefold(), который более общий, чем lower(), но с точки зрения типизации
+    # это тот же str
+    db_type_normalized = db_type.casefold()
 
-    if db_type.lower() in VALID_DB_TYPES:
-        if logger:
+    if db_type_normalized in VALID_DB_TYPES:
+        if logger is not None:
             logger.debug('DB_TYPE валиден: %s', db_type)
         return
 
-    msg = f"Некорректный DB_TYPE: '{db_type}'. Допустимые значения: {', '.join(VALID_DB_TYPES)}"
+    msg = (
+        f"Некорректный DB_TYPE: '{db_type}'. "
+        f'Допустимые значения: {", ".join(sorted(VALID_DB_TYPES))}'
+    )
     errors.append(msg)
-    if logger:
+    if logger is not None:
         logger.error(msg)
 
 
 def _validate_connection_string(
-    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Валидирует строку подключения."""
     conn_str = config.get('DB_CONNECT_URI')
@@ -285,7 +323,10 @@ def _validate_connection_string(
     _check_connection_string_validity(original_str, errors, logger)
 
 
-def _get_original_connection_string(config: ConfigDict, fallback: str) -> str | None:
+def _get_original_connection_string(
+    config: ConfigDict,
+    fallback: str,
+) -> str | None:
     """Получает оригинальную connection string из конфигурации."""
     original_key = '_original_CONNECTION_STRING'
     check_str = config.get(original_key, fallback)
@@ -293,7 +334,9 @@ def _get_original_connection_string(config: ConfigDict, fallback: str) -> str | 
 
 
 def _check_connection_string_validity(
-    connection_string: str, errors: list[str], logger: logging.Logger | None
+    connection_string: str,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Проверяет валидность connection string."""
     try:
@@ -311,29 +354,35 @@ def _check_connection_string_validity(
 
 
 def _validate_log_level(
-    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None = None,
 ) -> None:
-    """Валидирует уровень логирования."""
     log_level = config.get('LOG_LEVEL', 'INFO')
+
     if not isinstance(log_level, str):
         msg = 'LOG_LEVEL должен быть строкой'
         errors.append(msg)
-        if logger:
+        if logger is not None:
             logger.error(msg)
         return
 
-    if log_level.upper() not in VALID_LOG_LEVELS:
+    normalized = log_level.upper()
+
+    if normalized not in VALID_LOG_LEVELS:
         msg = (
             f"Некорректный LOG_LEVEL: '{log_level}'. "
-            f'Допустимые значения: {", ".join(VALID_LOG_LEVELS)}'
+            f'Допустимые значения: {", ".join(sorted(VALID_LOG_LEVELS))}'
         )
         errors.append(msg)
-        if logger:
+        if logger is not None:
             logger.error(msg)
 
 
 def _validate_numeric_params(
-    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Валидирует числовые параметры."""
     numeric_params = {
@@ -376,7 +425,9 @@ def _validate_single_numeric_param(
 
 
 def _validate_output_dir(
-    config: ConfigDict, errors: list[str], logger: logging.Logger | None
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Валидирует директорию для экспорта."""
     output_dir = config.get('OUTPUT_DIR', './exports')
@@ -391,7 +442,9 @@ def _validate_output_dir(
 
 
 def _create_output_directory(
-    dir_path: Path, errors: list[str], logger: logging.Logger | None
+    dir_path: Path,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> bool:
     """Создает директорию для экспорта."""
     try:
@@ -409,7 +462,9 @@ def _create_output_directory(
 
 
 def _check_directory_permissions(
-    dir_path: Path, errors: list[str], logger: logging.Logger | None
+    dir_path: Path,
+    errors: list[str],
+    logger: logging.Logger | None,
 ) -> None:
     """Проверяет права на запись в директорию."""
     if not os.access(dir_path, os.W_OK):
@@ -419,7 +474,11 @@ def _check_directory_permissions(
             logger.error(error)
 
 
-def get_config_value[T](config: ConfigDict, key: str, default: T | None = None) -> T | None:
+def get_config_value[T](
+    config: ConfigDict,
+    key: str,
+    default: T | None = None,
+) -> T | None:
     """Получает значение из конфигурации."""
     value = config.get(key, default)
     return cast(T | None, value)
@@ -479,7 +538,9 @@ def print_config_summary(
         _print_config_to_console(sections, config, mask_sensitive=mask_sensitive)
 
 
-def _log_config_header(logger: logging.Logger) -> None:
+def _log_config_header(
+    logger: logging.Logger,
+) -> None:
     """Логирует заголовок сводки конфигурации."""
     logger.info('=' * 60)
     logger.info('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
@@ -508,7 +569,9 @@ def _log_config_section(
         logger.info('  %-28s %s', param, display_value)
 
 
-def _log_config_footer(logger: logging.Logger) -> None:
+def _log_config_footer(
+    logger: logging.Logger,
+) -> None:
     """Логирует подвал сводки конфигурации."""
     logger.info('')
     logger.info('=' * 60)
@@ -552,7 +615,8 @@ def export_config_to_dict(
 
 
 def create_env_example(
-    output_path: str = '.env.example', logger: logging.Logger | None = None
+    output_path: str = '.env.example',
+    logger: logging.Logger | None = None,
 ) -> None:
     """Создает файл .env.example."""
     template = """# Database Configuration

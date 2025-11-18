@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from oracle_to_excel.config import load_config, print_config_summary
+from oracle_to_excel.database import get_connection, get_db_info, validate_connection_string
 from oracle_to_excel.logger import setup_logging
 
 
@@ -40,6 +41,43 @@ def main() -> int:
 
     logger.info('Конфигурация загружена.')
     print_config_summary(config, logger=logger)
+    # Получаем параметры подключения к БД
+    db_type = config.get('DB_TYPE')
+    connection_string = config.get('DB_CONNECT_URI')
+
+    if not connection_string or not isinstance(connection_string, str):
+        logger.error('Отсутствует или некорректен параметр DB_CONNECT_URI')
+        return 1
+
+    # Валидируем connection string
+    is_valid, error_message = validate_connection_string(connection_string)
+    if not is_valid:
+        logger.error('Невалидный connection string: %s', error_message)
+        return 1
+
+    logger.info('Connection string прошел валидацию')
+
+    # Подключаемся к БД и получаем информацию
+    try:
+        with get_connection(
+            connection_string=connection_string,
+            db_type=db_type,
+            read_only=True,
+            timeout=30,
+        ) as connection:
+            logger.info('Подключение к БД установлено')
+
+            # Получаем информацию о БД
+            db_info = get_db_info(connection, db_type or 'oracle')
+            logger.info('Информация о БД: %s', db_info)
+
+            # Здесь можно добавить дополнительную логику работы с БД
+
+    except Exception as e:
+        logger.error('Ошибка при подключении к БД: %s', e)
+        return 1
+
+    logger.info('Работа завершена успешно')
     return 0
 
 

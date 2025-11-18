@@ -1,0 +1,461 @@
+## Создание проекта oracle_to_excel с помощью uv и Python 3.14
+
+### Шаг 1: Установка uv (если еще не установлен)
+
+**Linux/macOS:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**Проверка установки:**
+```bash
+uv --version
+```
+
+### Шаг 2: Создание структуры проекта
+
+```bash
+# Создание директории проекта
+mkdir oracle_to_excel
+cd oracle_to_excel
+
+# Инициализация проекта с Python 3.14
+uv init --python 3.14
+```
+
+Это создаст базовую структуру:
+```
+oracle_to_excel/
+├── .python-version
+└── pyproject.toml
+```
+
+### Шаг 3: Настройка pyproject.toml
+
+Отредактируйте `pyproject.toml`:
+
+```toml
+[project]
+name = "oracle-to-excel"
+version = "0.1.0"
+description = "Export Oracle REPORT_EXCEL_SN table data to Excel with logging and error handling"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "oracledb>=2.4.0",
+    "openpyxl>=3.1.5",
+    "python-dotenv>=1.0.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.0.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+oracle-to-excel = "oracle_to_excel:main"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+```
+
+### Шаг 4: Создание структуры файлов проекта
+
+```bash
+# Создание основных директорий
+mkdir -p src/oracle_to_excel
+mkdir -p logs
+mkdir -p exports
+mkdir -p tests
+
+# Создание файлов
+touch src/oracle_to_excel/__init__.py
+touch src/oracle_to_excel/main.py
+touch .env.example
+touch .gitignore
+touch README.md
+```
+
+**Итоговая структура проекта:**
+```
+oracle_to_excel/
+├── src/
+│   └── oracle_to_excel/
+│       ├── __init__.py
+│       └── main.py
+├── logs/
+│   └── .gitkeep
+├── exports/
+│   └── .gitkeep
+├── tests/
+│   └── __init__.py
+├── .env.example
+├── .gitignore
+├── .python-version
+├── pyproject.toml
+├── README.md
+└── uv.lock (будет создан автоматически)
+```
+
+### Шаг 5: Установка зависимостей через uv
+
+```bash
+# Установка основных зависимостей
+uv sync
+
+# Или с dev-зависимостями
+uv sync --all-extras
+```
+
+Эта команда:
+- Создаст виртуальное окружение в `.venv`
+- Установит Python 3.14
+- Установит все зависимости из `pyproject.toml`
+- Создаст файл `uv.lock` для фиксации версий
+
+### Шаг 6: Создание .env.example
+
+Создайте файл `.env.example` с шаблоном конфигурации:
+
+```env
+# Oracle Database Connection (обязательные параметры)
+ORACLE_USER=POOL3
+ORACLE_PASSWORD=your_password_here
+ORACLE_DSN=hostname:1521/service_name
+
+# Connection Settings (опциональные)
+POOL_MIN=1
+POOL_MAX=5
+FETCH_ARRAY_SIZE=1000
+
+# Application Settings
+LOG_LEVEL=INFO
+LOG_FILE=./logs/oracle_export.log
+OUTPUT_DIR=./exports
+
+# Excel Settings
+MAX_COLUMN_WIDTH=50
+NULL_VALUE_REPLACEMENT=
+WRAP_LONG_TEXT=true
+
+# Performance
+SHOW_PROGRESS_BAR=true
+PROGRESS_UPDATE_INTERVAL=100
+```
+
+### Шаг 7: Создание .gitignore
+
+```bash
+cat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# uv
+.uv/
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+
+# Logs
+logs/*.log
+
+# Exports
+exports/*.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+EOF
+```
+
+### Шаг 8: Создание README.md
+
+```bash
+cat > README.md << 'EOF'
+# Oracle to Excel Exporter
+
+Export data from Oracle REPORT_EXCEL_SN table to formatted Excel files.
+
+## Features
+
+- Python 3.14 with modern best practices
+- Comprehensive logging with rotation
+- Error handling and retry logic
+- Progress bar for large datasets
+- Auto-formatted Excel output
+- Type conversion for Oracle data types
+- Configuration via .env file
+
+## Installation
+
+```
+# Clone the repository
+git clone <repository-url>
+cd oracle_to_excel
+
+# Install dependencies with uv
+uv sync
+```
+
+## Configuration
+
+1. Copy `.env.example` to `.env`:
+```
+cp .env.example .env
+```
+
+2. Edit `.env` with your Oracle credentials
+
+## Usage
+
+```
+# Activate virtual environment
+source .venv/bin/activate  # Linux/macOS
+# or
+.venv\Scripts\activate  # Windows
+
+# Run the script
+python -m oracle_to_excel.main --session 12345
+
+# Or using the installed script
+oracle-to-excel --session 12345
+
+# With custom output file
+oracle-to-excel --session 12345 --output report.xlsx
+
+# With verbose logging
+oracle-to-excel --session 12345 --verbose
+```
+
+## Development
+
+```
+# Install with dev dependencies
+uv sync --all-extras
+
+# Run tests
+uv run pytest
+
+# Format code
+uv run black src/
+
+# Lint code
+uv run ruff check src/
+```
+
+## Requirements
+
+- Python 3.14+
+- Oracle Database access
+- Write permissions for logs/ and exports/ directories
+
+## License
+
+MIT
+EOF
+```
+
+### Шаг 9: Создание пустых .gitkeep файлов
+
+```bash
+touch logs/.gitkeep
+touch exports/.gitkeep
+```
+
+### Шаг 10: Инициализация Git репозитория
+
+```bash
+git init
+git add .
+git commit -m "Initial project structure for oracle_to_excel"
+```
+
+### Шаг 11: Проверка установки Python 3.14
+
+```bash
+# Активация виртуального окружения
+source .venv/bin/activate  # Linux/macOS
+# или
+.venv\Scripts\activate  # Windows
+
+# Проверка версии Python
+python --version
+# Должно вывести: Python 3.14.x
+
+# Проверка установленных пакетов
+uv pip list
+```
+
+### Шаг 12: Создание базового __init__.py
+
+Отредактируйте `src/oracle_to_excel/__init__.py`:
+
+```python
+"""
+Oracle to Excel Exporter
+Export data from Oracle REPORT_EXCEL_SN table to formatted Excel files.
+"""
+
+__version__ = "0.1.0"
+__author__ = "Your Name"
+
+# Импорт main функции для удобства
+from oracle_to_excel.main import main
+
+__all__ = ["main"]
+```
+
+### Шаг 13: Создание скелета main.py
+
+Создайте базовый файл `src/oracle_to_excel/main.py`:
+
+```python
+#!/usr/bin/env python3
+"""
+Main module for Oracle to Excel export functionality.
+"""
+
+import sys
+
+
+def main() -> int:
+    """
+    Main entry point for the application.
+
+    Returns:
+        int: Exit code (0 for success, 1 for error)
+    """
+    print("Oracle to Excel Exporter v0.1.0")
+    print("Python version:", sys.version)
+    print("Project initialized successfully!")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+### Шаг 14: Тестовый запуск
+
+```bash
+# Запуск через модуль
+python -m oracle_to_excel.main
+
+# Или через установленный скрипт (после uv sync)
+oracle-to-excel
+```
+
+**Ожидаемый вывод:**
+```
+Oracle to Excel Exporter v0.1.0
+Python version: 3.14.x (...)
+Project initialized successfully!
+```
+
+### Шаг 15: Добавление дополнительных удобств для разработки
+
+Создайте `Makefile` (опционально):
+
+```makefile
+.PHONY: install test lint format clean run
+
+install:
+	uv sync --all-extras
+
+test:
+	uv run pytest tests/ -v
+
+lint:
+	uv run ruff check src/
+
+format:
+	uv run black src/
+	uv run ruff check --fix src/
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	rm -rf .pytest_cache/
+	rm -rf htmlcov/
+	rm -rf dist/
+	rm -rf build/
+
+run:
+	python -m oracle_to_excel.main --session 12345
+```
+
+### Проверка готовности проекта
+
+Выполните финальную проверку:
+
+```bash
+# 1. Проверка структуры
+tree -L 3 -a
+
+# 2. Проверка Python версии
+python --version
+
+# 3. Проверка установленных пакетов
+uv pip list
+
+# 4. Тестовый запуск
+python -m oracle_to_excel.main
+```
+
+**Результат:** Проект `oracle_to_excel` полностью инициализирован с Python 3.14, все зависимости установлены через uv, структура файлов создана. Готов к реализации основного функционала согласно плану.
+
+**Следующий шаг:** Начать реализацию модулей согласно плану - начиная с функции `load_config()` и `setup_logging()`.
