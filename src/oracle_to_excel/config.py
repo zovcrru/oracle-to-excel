@@ -8,15 +8,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 from urllib.parse import urlparse
-
-if TYPE_CHECKING:
-    import logging
 
 from oracle_to_excel.logger import get_logger
 
@@ -56,7 +54,7 @@ DEFAULT_CONFIG: Mapping[str, int | str] = {
 
 VALID_LOG_LEVELS: frozenset[str] = frozenset({'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'})
 
-VALID_DB_TYPES: frozenset[str] = frozenset({'oracle', 'postgresql'})
+VALID_DB_TYPES: frozenset[str] = frozenset({'oracle', 'postgresql', 'sqlite'})
 
 
 def load_config(env_file: str = '.env', *, use_logging: bool = True) -> ConfigDict:
@@ -100,9 +98,11 @@ def load_config(env_file: str = '.env', *, use_logging: bool = True) -> ConfigDi
     return cast(ConfigDict, config)
 
 
-def _load_required_params(logger: logging.Logger | None) -> dict[str, Any]:
+def _load_required_params(
+    logger: logging.Logger | None,
+) -> dict[str, str | int | bool]:
     """Загружает обязательные параметры из окружения."""
-    config: dict[str, Any] = {}
+    config: dict[str, str | int | bool] = {}
     missing_params = []
 
     for param in REQUIRED_CONFIG:
@@ -125,7 +125,10 @@ def _load_required_params(logger: logging.Logger | None) -> dict[str, Any]:
     return config
 
 
-def _load_optional_params(config: dict[str, Any], logger: logging.Logger | None) -> None:
+def _load_optional_params(
+    config: dict[str, str | int | bool],
+    logger: logging.Logger | None,
+) -> None:
     """Загружает опциональные параметры с значениями по умолчанию."""
     for param, default_value in DEFAULT_CONFIG.items():
         env_value = os.getenv(param)
@@ -169,7 +172,10 @@ def _log_parse_warning(
         logger.warning(error_msg)
 
 
-def _mask_sensitive_data(config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+def _mask_sensitive_data(
+    config: dict[str, str | int | bool],
+    logger: logging.Logger | None = None,
+) -> None:
     """Маскирует чувствительные данные в конфигурации."""
     sensitive_keys = {'DB_CONNECT_URI', 'PASSWORD', 'SECRET', 'TOKEN'}
     masked_count = 0
@@ -180,14 +186,14 @@ def _mask_sensitive_data(config: dict[str, Any], logger: logging.Logger | None =
 
         original = config[key]
         config[f'_original_{key}'] = original
-        config[key] = _get_masked_value(original)
+        config[key] = _get_masked_value(value=original)
         masked_count += 1
 
     if logger and masked_count > 0:
         logger.debug('Замаскировано %d чувствительных параметров', masked_count)
 
 
-def _get_masked_value(value: Any) -> str:
+def _get_masked_value(*, value: str | int | bool) -> str:
     """Возвращает замаскированное значение."""
     if isinstance(value, str) and '://' in value:
         return _mask_connection_string(value)
@@ -247,10 +253,10 @@ def _validate_db_type(config: ConfigDict, errors: list[str], logger: logging.Log
     """Валидирует тип базы данных."""
     db_type = config.get('DB_TYPE', '')
     if not isinstance(db_type, str):
-        error = 'DB_TYPE должен быть строкой'
-        errors.append(error)
+        msg = 'DB_TYPE должен быть строкой'
+        errors.append(msg)
         if logger:
-            logger.error(error)
+            logger.error(msg)
         return
 
     if db_type.lower() in VALID_DB_TYPES:
@@ -258,10 +264,10 @@ def _validate_db_type(config: ConfigDict, errors: list[str], logger: logging.Log
             logger.debug('DB_TYPE валиден: %s', db_type)
         return
 
-    error = f"Некорректный DB_TYPE: '{db_type}'. Допустимые значения: {', '.join(VALID_DB_TYPES)}"
-    errors.append(error)
+    msg = f"Некорректный DB_TYPE: '{db_type}'. Допустимые значения: {', '.join(VALID_DB_TYPES)}"
+    errors.append(msg)
     if logger:
-        logger.error(error)
+        logger.error(msg)
 
 
 def _validate_connection_string(
@@ -310,20 +316,20 @@ def _validate_log_level(
     """Валидирует уровень логирования."""
     log_level = config.get('LOG_LEVEL', 'INFO')
     if not isinstance(log_level, str):
-        error = 'LOG_LEVEL должен быть строкой'
-        errors.append(error)
+        msg = 'LOG_LEVEL должен быть строкой'
+        errors.append(msg)
         if logger:
-            logger.error(error)
+            logger.error(msg)
         return
 
     if log_level.upper() not in VALID_LOG_LEVELS:
-        error = (
+        msg = (
             f"Некорректный LOG_LEVEL: '{log_level}'. "
             f'Допустимые значения: {", ".join(VALID_LOG_LEVELS)}'
         )
-        errors.append(error)
+        errors.append(msg)
         if logger:
-            logger.error(error)
+            logger.error(msg)
 
 
 def _validate_numeric_params(
@@ -419,7 +425,10 @@ def get_config_value[T](config: ConfigDict, key: str, default: T | None = None) 
     return cast(T | None, value)
 
 
-def restore_sensitive_data(config: dict[str, Any], logger: logging.Logger | None = None) -> None:
+def restore_sensitive_data(
+    config: dict[str, str | int | bool],
+    logger: logging.Logger | None = None,
+) -> None:
     """Восстанавливает оригинальные чувствительные данные."""
     keys_to_restore = [k for k in config if k.startswith('_original_')]
     restored_count = 0
@@ -436,7 +445,10 @@ def restore_sensitive_data(config: dict[str, Any], logger: logging.Logger | None
 
 
 def print_config_summary(
-    config: ConfigDict, *, mask_sensitive: bool = True, logger: logging.Logger | None = None
+    config: ConfigDict,
+    *,
+    mask_sensitive: bool = True,
+    logger: logging.Logger | None = None,
 ) -> None:
     """
     Выводит краткую сводку конфигурации.
@@ -458,11 +470,13 @@ def print_config_summary(
         _log_config_header(logger)
 
         for section_name, params in sections:
-            _log_config_section(section_name, params, config, mask_sensitive, logger)
+            _log_config_section(
+                section_name, params, config, mask_sensitive=mask_sensitive, logger=logger
+            )
 
         _log_config_footer(logger)
     else:
-        _print_config_to_console(sections, config, mask_sensitive)
+        _print_config_to_console(sections, config, mask_sensitive=mask_sensitive)
 
 
 def _log_config_header(logger: logging.Logger) -> None:
@@ -476,6 +490,7 @@ def _log_config_section(
     section_name: str,
     params: list[str],
     config: ConfigDict,
+    *,
     mask_sensitive: bool,
     logger: logging.Logger,
 ) -> None:
@@ -502,6 +517,7 @@ def _log_config_footer(logger: logging.Logger) -> None:
 def _print_config_to_console(
     sections: list[tuple[str, list[str]]],
     config: ConfigDict,
+    *,
     mask_sensitive: bool,
 ) -> None:
     """Выводит конфигурацию в консоль через print."""
@@ -528,9 +544,11 @@ def _print_config_to_console(
     print()
 
 
-def export_config_to_dict(config: ConfigDict) -> dict[str, Any]:
+def export_config_to_dict(
+    config: ConfigDict,
+) -> dict[str, str | int | bool]:
     """Экспортирует конфигурацию в словарь."""
-    return dict(config)
+    return cast(dict[str, str | int | bool], dict(config))
 
 
 def create_env_example(
@@ -606,7 +624,7 @@ FETCH_ARRAY_SIZE=1000
             logger.error('✗ Ошибки валидации: %s', errors)
 
         print_config_summary(config, logger=logger)
-        restore_sensitive_data(cast(dict[str, Any], config), logger)
+        restore_sensitive_data(cast(dict[str, str | int | bool], config), logger)
         logger.info('✓ Чувствительные данные восстановлены')
 
     finally:

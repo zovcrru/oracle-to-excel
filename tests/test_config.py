@@ -29,13 +29,12 @@ def test_load_config_success() -> None:
     test_env = Path('.env.test')
     test_env.write_text(
         """
-ORACLE_USER=test_user
-ORACLE_PASSWORD=test_pass
-ORACLE_DSN=localhost:1521/TEST
-POOL_MIN=2
-POOL_MAX=5
+DB_TYPE = "sqlite"
+DB_CONNECT_URI = "sqlite:///lice.sqlite3"
+# Application Settings
 LOG_LEVEL=DEBUG
-OUTPUT_DIR=./test_exports
+LOG_FILE=./logs/oracle_export.log
+OUTPUT_DIR=./exports
 """
     )
 
@@ -86,13 +85,12 @@ def test_validate_config() -> None:
     test_env = Path('.env.test')
     test_env.write_text(
         """
-ORACLE_USER=test_user
-ORACLE_PASSWORD=test_pass
-ORACLE_DSN=localhost:1521/TEST
-POOL_MIN=2
-POOL_MAX=5
+DB_TYPE = "sqlite"
+DB_CONNECT_URI = "sqlite:///lice.sqlite3"
+# Application Settings
 LOG_LEVEL=DEBUG
-OUTPUT_DIR=./test_exports
+LOG_FILE=./logs/oracle_export.log
+OUTPUT_DIR=./exports
 """
     )
 
