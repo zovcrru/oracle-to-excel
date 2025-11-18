@@ -328,7 +328,7 @@ def _get_original_connection_string(
     fallback: str,
 ) -> str | None:
     """Получает оригинальную connection string из конфигурации."""
-    original_key = '_original_CONNECTION_STRING'
+    original_key = '_original_DB_CONNECT_URI'
     check_str = config.get(original_key, fallback)
     return check_str if isinstance(check_str, str) else None
 

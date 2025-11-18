@@ -8,12 +8,13 @@ Oracle to Excel Exporter.
 from __future__ import annotations
 
 __version__ = '1.0.0'
-__author__ = 'Oracle Excel Team'
+__author__ = 'zovcrru'
 
-# Экспортируем основные функции из модулей
+# # Экспортируем основные функции из модулей
 from oracle_to_excel.config import (
     ConfigDict,
     load_config,
+    print_config_summary,
     restore_sensitive_data,
     validate_config,
 )
@@ -24,33 +25,19 @@ from oracle_to_excel.logger import (
     setup_logging,
 )
 
-# from oracle_to_excel.database import (
-#     create_connection,
-#     close_connection,
-#     test_connection,
-#     get_connection,
-#     detect_db_type,
-#     validate_connection_string,
-#     DBType,
-# )
+# Mark these names as used for static analysis (exported symbols)
+_EXPORTS = (
+    ConfigDict,
+    load_config,
+    print_config_summary,
+    restore_sensitive_data,
+    validate_config,
+    get_logger,
+    log_execution_time,
+    log_function_call,
+    setup_logging,
+)
 
-__all__ = [
-    # Logger
-    'setup_logging',
-    'get_logger',
-    'log_execution_time',
-    'log_function_call',
-    # Config
-    'load_config',
-    'validate_config',
-    'restore_sensitive_data',
-    'ConfigDict',
-    # Database
-    # 'create_connection',
-    # 'close_connection',
-    # 'test_connection',
-    # 'get_connection',
-    # 'detect_db_type',
-    # 'validate_connection_string',
-    # 'DBType',
-]
+# Explicit `__all__` is omitted to avoid maintenance burden;
+# consumers should import from submodules, e.g. `from oracle_to_excel.config import load_config`,
+# or access via `oracle_to_excel.config`/`oracle_to_excel.logger`.

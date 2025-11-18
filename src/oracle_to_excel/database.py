@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path as _Path
 from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
 
@@ -281,8 +282,35 @@ def _create_sqlite_connection(
     if db_path.startswith('file:') or '://' in connection_string:
         use_uri = True
 
+    # Если путь не uri и относительный, попробуем разрешить его относительно
+    # текущей рабочей директории, а затем относительно директории модуля
+    if not use_uri:
+        p = _Path(db_path)
+        if not p.is_absolute():
+            cand = _Path.cwd() / p
+            if cand.exists():
+                db_path = str(cand)
+            else:
+                module_dir = _Path(__file__).resolve().parent
+                cand2 = module_dir / p
+                if cand2.exists():
+                    db_path = str(cand2)
+                else:
+                    # Если ни в одной из директорий файл не найден, создаём родительскую директорию
+                    # чтобы sqlite мог создать файл, если это ожидаемое поведение
+                    parent = cand2.parent
+                    try:
+                        parent.mkdir(parents=True, exist_ok=True)
+                    except Exception:
+                        # не фатально — sqlite выведет понятную ошибку
+                        pass
+                    db_path = str(cand2)
+
     # Создаём подключение корректно — sqlite3.connect не поддерживает kwarg autocommit
     if use_uri:
+        # sqlite3 expects a file: URI when uri=True; ensure proper prefix
+        if not db_path.startswith('file:'):
+            db_path = 'file:' + db_path
         conn = sqlite3.connect(db_path, timeout=timeout, uri=True)
     else:
         conn = sqlite3.connect(db_path, timeout=timeout)
