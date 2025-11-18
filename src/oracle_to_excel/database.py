@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
 
 try:
@@ -133,27 +133,23 @@ def detect_db_type(connection_string: ConnectionString) -> DBType:
     Raises:
         DatabaseTypeDetectionError: If the database type cannot be determined.
     """
-    parsed = urlparse(connection_string)
-    scheme = parsed.scheme.lower()
-    match scheme:
-        case 'oracle' | 'oracle+cx_oracle' | 'oracle+oracledb':
-            return 'oracle'
-        case 'postgresql' | 'postgres' | 'postgresql+psycopg' | 'postgresql+psycopg3':
-            return 'postgresql'
-        case 'sqlite' | 'sqlite3':
-            return 'sqlite'
-        case _:
-            if ':1521/' in connection_string or ':1521@' in connection_string:
-                return 'oracle'
-            if (
-                ':5432/' in connection_string
-                or 'postgresql://' in connection_string.lower()
-                or ':5433/' in connection_string
-            ):
-                return 'postgresql'
-            raise DatabaseTypeDetectionError(
-                f'Не удалось определить тип БД: {connection_string}',
-            )
+    s = connection_string.lower()
+
+    if s.startswith(('oracle', 'oracle+cx_oracle', 'oracle+oracledb')):
+        return 'oracle'
+    if s.startswith(('postgresql', 'postgres', 'postgresql+psycopg', 'postgresql+psycopg3')):
+        return 'postgresql'
+    if s.startswith(('sqlite', 'sqlite3')) or s == ':memory:' or s.endswith(('.sqlite3', '.db')):
+        return 'sqlite'
+
+    if ':1521/' in s or ':1521@' in s:
+        return 'oracle'
+    if ':5432/' in s or ':5433/' in s or 'postgresql://' in s:
+        return 'postgresql'
+
+    raise DatabaseTypeDetectionError(f'Не удалось определить тип БД: {connection_string}')
+    # safety fallback for static analyzers
+    raise DatabaseTypeDetectionError(f'Не удалось определить тип БД: {connection_string}')
 
 
 @log_execution_time
@@ -213,9 +209,8 @@ def create_connection(
                 timeout=timeout,
             )
 
-        case _:
-            logger.error('Unsupported database type: %s', db_type)
-            raise ValueError('Неподдерживаемый тип БД: %s', db_type)
+    # Если дошли сюда — тип неизвестен
+    raise ValueError(f'Неподдерживаемый тип БД: {db_type}')
 
 
 def _create_oracle_connection(
@@ -225,12 +220,11 @@ def _create_oracle_connection(
     timeout: int,
 ) -> DatabaseConnection:
     parsed = urlparse(connection_string)
-    print(connection_string, parsed)
-    print(parsed.hostname, parsed.port)
-    exit(1)
-    dsn = oracledb.makedsn(
-        parsed.hostname, parsed.port or 1521, service_name=parsed.path.lstrip('/')
-    )
+    host = parsed.hostname
+    if not host:
+        raise ValueError('Отсутствует hostname в строке подключения Oracle')
+    port = parsed.port or 1521
+    dsn = oracledb.makedsn(host, port, service_name=parsed.path.lstrip('/'))
     conn = oracledb.connect(
         user=parsed.username,
         password=parsed.password,
@@ -244,7 +238,7 @@ def _create_oracle_connection(
         cursor.execute('SET TRANSACTION READ ONLY')
         cursor.close()
     conn.autocommit = False
-    return conn
+    return cast(DatabaseConnection, conn)
 
 
 def _create_postgresql_connection(
@@ -260,7 +254,7 @@ def _create_postgresql_connection(
         connect_timeout=timeout,
         options=options,
     )
-    return conn
+    return cast(DatabaseConnection, conn)
 
 
 def _create_sqlite_connection(
@@ -269,12 +263,31 @@ def _create_sqlite_connection(
     read_only: bool,
     timeout: int,
 ) -> DatabaseConnection:
-    conn = sqlite3.connect(
-        connection_string,
-        timeout=timeout,
-        autocommit=False,
-    )
-    return conn
+    # Поддерживаем несколько вариантов указания sqlite-пути:
+    # - plain file path: "lice.sqlite3"
+    # - sqlalchemy style: "sqlite:///lice.sqlite3" (parsed.path -> '/lice.sqlite3')
+    # - file URI: "file:..." (поддерживается через uri=True)
+    parsed = urlparse(connection_string)
+    db_path = connection_string
+    if parsed.scheme and parsed.scheme.startswith('sqlite'):
+        # для 'sqlite:///file.db' parsed.path == '/file.db'
+        if parsed.path:
+            db_path = parsed.path.lstrip('/')
+        elif parsed.netloc:
+            db_path = parsed.netloc
+
+    # Решаем, нужно ли включать режим uri для sqlite3.connect
+    use_uri = False
+    if db_path.startswith('file:') or '://' in connection_string:
+        use_uri = True
+
+    # Создаём подключение корректно — sqlite3.connect не поддерживает kwarg autocommit
+    if use_uri:
+        conn = sqlite3.connect(db_path, timeout=timeout, uri=True)
+    else:
+        conn = sqlite3.connect(db_path, timeout=timeout)
+
+    return cast(DatabaseConnection, conn)
 
 
 def close_connection(
@@ -305,11 +318,7 @@ def get_connection(
     *,
     read_only: bool = False,
     timeout: int = 30,
-) -> Generator[
-    DatabaseConnection,
-    None,
-    None,
-]:
+) -> Generator[DatabaseConnection]:
     """
     Context manager для работы с подключением к БД.
 
@@ -485,8 +494,21 @@ def check_url_parts(
     Returns:
         Кортеж (валидность, сообщение об ошибке).
     """
+    # Для sqlite допустимы схемы 'sqlite' и отсутствие hostname (локальный файл)
     if not parsed.scheme:
-        return False, 'Отсутствует схема подключения (oracle:// или postgresql://)'
+        # Отсутствие схемы допускается для локальных файлов (например 'lice.sqlite3')
+        if not parsed.path:
+            return False, 'Отсутствует путь к файлу для sqlite или схема подключения'
+        return True, ''
+
+    scheme = parsed.scheme.lower()
+    if scheme.startswith('sqlite'):
+        # sqlite://... может не иметь hostname, проверяем наличие пути/нетлока
+        if parsed.path or parsed.netloc:
+            return True, ''
+        return False, 'Отсутствует путь к sqlite базе'
+
+    # для остальных схем требуется hostname
     if not parsed.hostname:
         return False, 'Отсутствует hostname'
     return True, ''
@@ -516,9 +538,10 @@ def try_detect_db_type(connection_string: str) -> tuple[bool, str]:
     """
     try:
         db_type = detect_db_type(connection_string)
-        return True, db_type
     except ValueError as e:
         return False, str(e)
+    else:
+        return True, db_type
 
 
 def validate_connection_string(
@@ -541,7 +564,7 @@ def validate_connection_string(
 
     is_valid, parsed_or_err = try_parse_url(connection_string)
     if not is_valid:
-        return False, parsed_or_err
+        return False, str(parsed_or_err)
 
     is_valid, error = check_url_parts(parsed_or_err)
     if not is_valid:
@@ -549,7 +572,7 @@ def validate_connection_string(
 
     is_valid, db_type_or_err = try_detect_db_type(connection_string)
     if not is_valid:
-        return False, db_type_or_err
+        return False, str(db_type_or_err)
 
     logger.debug('Connection string валиден для %s', db_type_or_err)
     return True, ''
