@@ -1,0 +1,485 @@
+Все о формировании аналитических отчетов.
+
+Вызов осуществляется кнопкой – BUT_RUN или  BUT_EXCEL :
+VID_REPORT ='ATL'
+
+– BUT_RUN
+if :bl_but.old_VID_REPORT ='ATL' then
+--=================================================
+   CALL_REPORT_ATL;
+
+PROCEDURE CALL_REPORT_ATL
+
+PREPARE_ANALIT(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2), v_where,:BL_BUT.VID_BALANS );
+   P_EXCEL_ATL.EXE(:GLOBAL.ses,v_where,substr(to_char(:ALLGB.GB),3,2),:BL_BUT.ITG);
+
+
+
+
+
+
+- BUT_EXCEL
+if :bl_but.old_VID_REPORT='ATL' then
+      PREPARE_ANALIT(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2), v_where,:BL_BUT.VID_BALANS );
+
+
+
+
+Сбор информации в  процедуре  PREPARE_ ANALIT (*,*);
+/* Процедура собирает все для аналитических таблиц, VID_REPORT='ATL'*/
+
+CURSOR C1 IS SELECT * FROM REPORT_ATL_PLAN_SN
+      WHERE SES=p_ses and  numG is not null order by numG;
+rec1 C1%ROWType;
+
+Cursor  C2 is select distinct numA from report_ATL_plan_sn where ses=p_ses and numA is not null;
+  rec2 C2%ROWType;
+
+Cursor  C3 is select distinct * from report_ATL_plan_sn where ses=p_ses and numr is not null;
+  rec3 C3%ROWType;
+
+
+FOR rec3 IN c3 LOOP
+ v_nr :=rec3.numr;
+ v_tch_atl :=rec3.tch_atl;
+if p_ur='O' then
+ V_TZ_ATL := rec3.tz_atl_oil;
+ V_UR :='OIL';
+elsif p_ur='G' then
+ V_TZ_ATL := rec3.tz_atl_GAS;
+ V_UR :='GAS';
+elsif p_ur='C'then
+ V_TZ_ATL := rec3.tz_atl_CON;
+ V_UR :='COND';
+end if;
+--========================
+FOR rec1 IN c1 LOOP
+…
+END LOOP;
+
+if p_ur='O' then
+
+P_ANLT.ins_anlt(p_ses,p_gb,v_ur,replace(v_where_atl,'**','O'), v_vch, v_vt,v_vgr, v_tch_atl,v_tz_atl,v_nr);
+
+elsif p_ur='G' then
+
+
+P_ANLT.ins_anlt(p_ses,p_gb,'GR',replace(v_where_atl,'**','R'), v_vch, replace(v_vt,'**','R'),replace(v_vgr,'**','R'), v_tch_atl,replace(v_tz_atl,'**','R'),v_nr);
+P_ANLT.ins_anlt(p_ses,p_gb,'GH',replace(v_where_atl,'**','H'), v_vch, replace(v_vt,'**','H'),replace(v_vgr,'**','H'), v_tch_atl,replace(v_tz_atl,'**','H'),v_nr);
+P_ANLT.ins_anlt(p_ses,p_gb,'GS',replace(v_where_atl,'**','G'), v_vch, replace(v_vt,'**','G'),replace(v_vgr,'**','G'), v_tch_atl,replace(v_tz_atl,'**','G'),v_nr);
+
+
+elsif p_ur='C' then
+P_ANLT.ins_anlt(p_ses,p_gb,'CS',v_area, v_vch, v_vt,v_vgr, v_tch_atl,replace(v_tz_atl,'**','S'),v_nr);
+P_ANLT.ins_anlt(p_ses,p_gb,'CH',v_area, v_vch, v_vt,v_vgr, v_tch_atl,replace(v_tz_atl,'**','H'),v_nr);
+
+end if;
+
+--====================== upd_oil
+
+for rec1 in c1 loop
+if rec1.t='V3_AB1C1**' then
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','R'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','S'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','H'), v_nr);
+
+else
+  P_ANLT.upd_anlt ( p_ses, rec1.numg, rec1.t, v_nr);
+end if;
+end loop;
+
+
+P_ANLT.DEL_NULL(p_ses);
+
+--======================= ins_itg_oil
+for rec1 in c1 loop
+…
+if p_ur='O' then
+
+  P_ANLT.ins_itg_anlt ( p_ses, rec1.numg, rec1.t, v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.count_nzo_T ( p_ses);
+else
+
+		if rec1.t='v3_AB1C1**' then
+P_ANLT.ins_itg_anlt ( p_ses, rec1.numg, replace(rec1.t,'**','R'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.ins_itg_anlt ( p_ses, rec1.numg, replace(rec1.t,'**','H'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.ins_itg_anlt ( p_ses, rec1.numg, replace(rec1.t,'**','S'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+                else
+P_ANLT.ins_itg_anlt ( p_ses, rec1.numg, rec1.t, v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+		end if;
+
+P_ANLT.count_nzo_T ( p_ses);
+end if;
+end loop;
+
+if p_ur in ('G','C' ) then
+P_ANLT.ins_itg_GAS( p_ses);
+else
+null;
+end if;
+
+
+--======================итоги по отчету--включила итоги для всех таблиц
+
+P_ANLT.ins_wsego (p_ses);
+
+END;
+--=====================================================================================
+
+P_EXCEL_ATL.EXE(:GLOBAL.ses,v_where,substr(to_char(:ALLGB.GB),3,2),:BL_BUT.ITG);
+
+P_EXCEL_ATL.insert_table ;
+P_EXCEL_ATL.INS_NUMG_UR
+P_EXCEL_ATL.ins_numg
+P_EXCEL_ATL.ins_cat
+P_EXCEL_ATL.delete_vidG
+P_EXCEL_ATL.upd_num_ITG
+
+Nr=7   Состояние и изменение запасов ?по категориям АВ1, С1 и B2С2 за & год
+
+
+
+IF :bl_but.NR  in (7) THEN
+      repname := 'atl_r7_NC.rep';
+
+
+
+1.
+
+
+Nr=303  --Таблица по запасам нефти, газа и конденсата
+Вызов осуществляется кнопкой – BUT_EXCEL :
+    Запуск работы в процедуре формы PREPARE_TEMA( *, *);
+OGC - вид ресурса (нефть+газ+конд)
+Сбор информации в процедуре  формы   :
+prepare_TEM_prl2 (*,'OGC', 'MVN');
+Запускаются расчеты в пакетах и процедурах:
+P_EXCEL_ATL2.ins_anlt_22(*,’OIL’,*);
+P_EXCEL_ATL2.ins_anlt_22(*,'GR',*);
+P_EXCEL_ATL2.ins_anlt_22(*,'GH',*);
+P_EXCEL_ATL2.ins_anlt_22(*,'GS',*);
+P_EXCEL_ATL2.ins_anlt_22(*,'CS',*);
+P_EXCEL_ATL2.ins_anlt_22(*,'CH',*);
+
+  Заполняется таблица ANALIT_SN для раздела 303 , селект прописан для каждого ресурса. Тема “A” – первичная выборка по залежам.
+Зашиты 3 группировки и изменять их нельзя. По предприятию, месторождению, лицензионному участку.
+(group by ||основная выборка по группировке|| ,t.ti_m, t.pr, nr,  nl, t.nzo ).
+
+P_EXCEL_ATL2.ins_upd_2(p_ses); - для колонок t1 и o_t1 и пр. Убираются лишние знаки, которые нужны для сортировки данных.
+
+P_EXCEL_ATL2.ins_itg_tema  (*,*);
+Расчет итоговых строк, прописана группа “MVN”, “PR”= тема “B”.
+P_EXCEL_ATL2.ins_itg_gas (p_ses, :bl_but.NR); Зачем?!?  NR =303 нет в этой процедуре, но в сценарии для других nr должен пройти.
+
+P_EXCEL_ATL2.ins_wsego (*);  Тж не нужно для nr=303, но в сценарии для других nr должен пройти.
+
+P_EXCEL_ATL2.EXE_PRIL2(*, *, 303);
+Чистит таблицы для эксель, и вызывается процедура
+insert_PRIL2(*, *); -- загружает таблицу EXCEL_ATL.
+Затем идет процедура exel_PRIL303  (* ).
+Вставляет строки  в таблицу REPORT_EXCEL_ATL2_SN (курсор открыт по компании.) И дальше вызывается процедура
+exel_PRIL2  (*,  *) ;
+Вставляет строки  в таблицу REPORT_EXCEL_ATL2_SN (курсор открыт по компании и идет выбор по месторожению).  И дальше вызывается процедура
+upd_PRIL2_mv ( *,*);
+Вставляется вся информация по колонкам.
+все!
+
+targets
+
+
+Nr=304  --  Баланс запасов по залежам
+Все для этого отчета запускается из триггера  кнопки  – BUT_EXCEL :
+Заполняется в конечном итоге таблица REPORT_EXCEL_ATL2_SN
+
+
+1. Чистка таблиц
+      --НЕФТЬ
+        EXCEL_OIL, EXCEL_,EXCEL_, report_excel_atl2_sn;
+Начало выборки на нефть- как в балансе нефти:
+        p_oil.Clear_OIL (*);- очистка таблиц для ресурса OIL/
+      Выпоняется процедура формы-  PREPARE_OIL(*,*);
+ 	Собирается информация ресурс ‘OIL’ по залежи и по категориям А, В, С1, С2 в таблицу OIL_CAT_SN.
+P_OIL.ins_oil_cat(*,* );
+P_OIL.ins_oil_cat_avg (*,*);
+
+Затем, рассчитывается категория АВ и АВС1.  В процедуре -
+P_OIL.ins_oil_cat_ab_abc1 (*,*);
+Идет сбор для информации по залежи целиком -   таблица OIL_SN.
+P_OIL.ins_oil (*, *);
+Удаляет из таблицы пустые записи из таблицы OIL_CAT_SN.
+P_OIL.DEL_NULL_OIL(*);
+P_OIL.upd_oil ( *, * )
+Считаются суммы , тема В
+P_OIL.ins_itg_oil ( *, *  );
+
+Затем вызывается пакет, где идет выборка в экселевские таблицы
+        P_EXCEL_ATL2.exe_304(*,*); Вызываются пакетные процедуры для нефти -
+P_EXCEL.insert_table(*, *);-  заполняется таблица EXCEL_OIL.
+Удаляются дублирующие строки (кат АВ, АВС1, и группировки) и остатки только в одном случае…
+P_EXCEL.DELETE_MZLO(*);-
+P_EXCEL.DELETE_CAT(*, *);
+P_EXCEL.delete_OSTIG(*);
+Чистка лишней информации и вставка данных их справочников, например индексация пласта.
+P_EXCEL.UPDATE_TABLE(*);
+P_EXCEL.UPDATE_TR( *, *); - из этой процедуры вызывается
+							P_EXCEL.UPDATE_NZO_TR( * , *) ;
+							P_EXCEL.UPDATE_ZLO_TR(*, *)  ;
+			P_EXCEL_ATL2.NZO_MVN_304 (* ,  'OIL' , *);
+			P_EXCEL_ATL2. UPDATE_TI(*, 'OIL', *);
+- Идет выборка типа месторождений  и названия лиц.участка для выбранных данных.
+			P_EXCEL_ATL2. exel_ins  (*, * );-- идет заполнение конечной табл. REPORT_EXCEL_ATL2_SN. (Заполняются строки по заданному порядку)
+			P_EXCEL_ATL2. upd_304 ( * ,*);-- вставляются данные по строкам табл. REPORT_EXCEL_ATL2_SN.
+message('Расчет нефти выполнен.', no_acknowledge);    -- Таблица заполнена OIL
+
+     --ГАЗ
+Все по аналогии с нефтью. Только процедуры из пакета по газу.
+        p_gas.Clear_GAS (*);- очистка таблиц.
+        PREPARE_gas(*,*);
+Собирается информация по залежи и по категориям А, В, С1, С2 в таблицу GAS_CAT_SN
+И по ресурсам  'G', 'H', 'R' ;
+p_gas.ins_gas_cat(*,*);
+p_gas.ins_gas (*, *);
+p_gas.INS_GAS_SUM(*, *);
+p_gas.ins_wsego_gas (*);
+
+        P_EXCEL_ATL2.EXE_304_G(*,*);
+P_EXCEL_GAS.insert_table(*, *);
+P_EXCEL_GAS.delete_vidg(*);
+P_EXCEL_GAS.DELETE_MZLO(*);
+P_EXCEL_GAS.DELETE_CAT(*, *);
+P_EXCEL_GAS.delete_OSTIG(*);
+P_EXCEL_GAS.UPDATE_TABLE(*);
+P_EXCEL_GAS.UPDATE_TR( *, *);
+
+P_EXCEL_ATL2.NZO_MVN_304 (* ,  'GAS' , *);
+P_EXCEL_ATL2.UPDATE_TI(* , 'GAS'*);
+- Идет выборка типа месторождений  и названия лиц.участка для выбранных данных.
+P_EXCEL_ATL2.exel_ins_g  (* );
+P_EXCEL_ATL2.upd_304_G ( * , *);
+message('Расчет газа выполнен.', no_acknowledge);    -- Таблица заполнена GAS');
+
+      --КОНД
+Все по аналогии с нефтью. Только процедуры из пакета по конденсату.
+        p_cond.Clear_COND (*);
+        PREPARE_COND(*,*);
+Собирается информация по залежи и по категориям А, В, С1, С2 в таблицу  COND_CAT_SN
+И по ресурсам  'CS', 'CH';
+P_COND.ins_cond_cat(*,*);
+P_COND.ins_cond_cat_ab_abc1 (*, *);
+P_COND.ins_cond_cat_sum (*, *);
+P_EXCEL_ATL2.EXE_304_CON(*,*);
+				P_EXCEL_COND.insert_table(*, *);
+P_EXCEL_COND.delete_vidg(*);
+P_EXCEL_COND.DELETE_MZLO(*);
+P_EXCEL_COND.DELETE_CAT(*,*);
+P_EXCEL_COND.delete_OSTIG(*);
+P_EXCEL_COND.UPDATE_TABLE(*);
+P_EXCEL_COND.UPDATE_TR( *, *);
+
+P_EXCEL_COND.NZO_MVN_304 (* ,  'COND', * );
+P_EXCEL_COND.UPDATE_TI(* , 'COND', *);
+P_EXCEL_COND.exel_ins_con  (* );
+P_EXCEL_COND.upd_304_CON ( *,*);
+message('Расчет конденсата выполнен.', no_acknowledge);    -- Таблица заполнена CON');
+
+Затем -
+=======================================================================
+   prog:=PATH||'To_Excel.exe' ||' '||:global.ses||' ' ||to_char(:ALLGB.GB)||' '||
+             :BL_BUT.VID_BALANS ||' '||to_char(:bl_but.NR)||' '||substr(:BL_BUT.who,1,1) ||' '||
+             :global.owneruser||' '||:global.vpwcase ||' '||:global.vcn;
+Все.
+
+
+--400  --  лицензионные участки с перечнем залежей
+Вызов осуществляется кнопкой – BUT_EXCEL :
+    Запуск работы в процедуре формы PREPARE_TEMA(*,*);   -- OGC - вид ресурса (нефть+газ+конд)
+Для этого отчета выполняются расчеты в процедурах:
+PREPARE_SPISOK(*, * );
+P_ANLT.ins_anlt(*,'OGC',*); --Собирается информация по заданной группировке и области выполнения в таблицу ANALIT_SN. Выбор информации идет из вью V_PCT_ATL_ALLS (за каждый год баланса своя).
+P_ANLT.upd_anlt ( *, *);- вставка по заданным условиям.
+P_ANLT.ins_itg_spis ( *, *);- идет обработка вложенности группировок и от этого результата – кого и какие поля считать, выбраны свободные поля в табл. ANALIT_SN для данного отчета и туда идет расчет кол-во разных параметров.
+Зарезервированы такие поля –
+XN_ABC1 (кол-во пластов), X1_ABC1 (кол-во залежей), JNG_ABC1 (кол-во лицензий), XN_C2 (кол-во месторождений).
+Все собрано и расчитано, идем в пакет
+P_EXCEL_ATL.EXE(*,*);
+
+“update ANALIT_SN P SET  (tema)='B', numg=11, VID_GROUP='RC'  where ses=v_ses  and tema='A' “;
+- вставлено для залежей номер группы 11 и вид гроппы – RC(расчетная) и тема В.
+
+ Загружается таблица –( REPORT_ATL_SPIS p (ses, numg, vid_group, titul)
+  select distinct ses,  numg, vid_group, titul    from report_atl_plan_sn t
+     where  ses=v_ses  and numg is not null
+      order by  numg;)
+
+и последняя группировка по залежам.
+insert into REPORT_ATL_SPIS p (ses, numg, vid_group)
+   select distinct ses,  11,'RC'   from report_atl_plan_sn t
+     where  ses=v_ses  and numg is not null;
+вставляется номер группы
+ update REPORT_ATL_SPIS p SET  (numr)=
+(select distinct numr    from report_atl_plan_sn t
+     where  ses=v_ses and numr is not null);
+надпись
+update REPORT_ATL_PLAN_SN  p SET  (titul)=null where  ses=v_ses and vid_group in ('NLU', 'MVN', 'ZLO','NZO') ;
+
+P_EXCEL_ATL.repl_SPIS (v_ses); - расчитывает, какой по порядку номер колонки идет запись по данной группе – и 1 или 2 колонки выделено для информации по группе. А также титул для шапки колонки – что именно там считается (‘кол-во пластов’, ‘кол-во месторождений’, ‘кол-во залежей’, ‘кол-во лиц.уч.’)
+
+P_EXCEL_ATL.insert_table(*);- вставка данных в таблицу EXCEL_ATL.
+P_EXCEL_ATL.INS_NUMG_UR(*, *); --вставка информации построчно в таблицу REPORT_EXCEL_ATL_SN.  Из процедуры вызов процедуры -P_EXCEL_ATL.INS_NUMG.
+P_EXCEL_ATL.ins_spis ( *,*);
+P_EXCEL_ATL.ins_cat ( * ,*);
+P_EXCEL_ATL.delete_vidG(v_ses);
+
+Nr=450  --  трудноизвлекаемые запасы
+Вызов осуществляется кнопкой – BUT_EXCEL :
+    Запуск работы в процедуре формы PREPARE_TEMA(*,*);
+        PREPARE_TEMA(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2), v_where , :BL_BUT.VID_BALANS);
+--messagebox ('v_where='||v_where);
+        if :BL_BUT.VID_BALANS='O'  then
+           P_ALLS_TEM.TR_OIL(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2) , v_where );
+        end if;
+        if :BL_BUT.VID_BALANS='G'  then
+           P_ALLS_TEM.TR_GAS(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2) );
+        end if;
+        if :BL_BUT.VID_BALANS='C'  then
+           P_ALLS_TEM.TR_CON(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2) );
+        end if;
+      end if;  -- 450
+
+if :bl_but.old_VID_REPORT='ATL' then
+Order_Group_ATL;
+Order_Group_ATL_numg;   synchronize;
+update_ATL_plan_sn;
+if (:bl_but.old_VID_REPORT  in ('ATL','TKZ','TEM') and (:bl_but.nr<>304) ) then
+
+v_area := AREA_ATL (:global.ses);
+End if;
+---=============================================================== 'ATL','TKZ', 'TEM'
+DELETE from analit_sn where ses=:GLOBAL.SES;
+DELETE from analit_zlo_sn where ses=:GLOBAL.SES;
+delete from report_excel_ATL_sn where ses=:GLOBAL.ses;
+delete from EXCEL_ATL where ses=:GLOBAL.ses;
+delete from REPORT_ATL_SPIS  where ses=:GLOBAL.ses;
+delete from  REPORT_EXCEL_ATL2_SN where ses=:GLOBAL.ses;
+
+if :bl_but.old_VID_REPORT='ATL' then
+message('Расчет нефти НАЧАЛО.', no_acknowledge);    -- Таблица заполнена OIL
+PREPARE_ANALIT(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2), v_where,:BL_BUT.VID_BALANS );
+if p_ur='O' then
+P_ANLT.ins_anlt
+              (p_ses,p_gb,v_ur,replace(v_where_atl,'**','O'), v_vch, v_vt,v_vgr, v_tch_atl, v_tz_atl, v_nr) ;
+elsif p_ur='G' then
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GR',replace(v_where_atl,'**','R'), v_vch, replace(v_vt,'**','R'),replace(v_vgr,'**','R'), v_tch_atl, replace(v_tz_atl,'**','R'), v_nr);
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GH',replace(v_where_atl,'**','H'), v_vch, replace(v_vt,'**','H'),replace(v_vgr,'**','H'), v_tch_atl,replace(v_tz_atl,'**','H'),v_nr);
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GS',replace(v_where_atl,'**','G'), v_vch, replace(v_vt,'**','G'),replace(v_vgr,'**','G'), v_tch_atl,replace(v_tz_atl,'**','G'),v_nr);
+elsif p_ur='C' then
+P_ANLT.ins_anlt(p_ses,p_gb,'CS',v_area, v_vch, v_vt,v_vgr, v_tch_atl,replace(v_tz_atl,'**','S'),v_nr);
+P_ANLT.ins_anlt(p_ses,p_gb,'CH',v_area, v_vch, v_vt,v_vgr, v_tch_atl,replace(v_tz_atl,'**','H'),v_nr);
+end if;
+if v_nr=6 then
+P_ANLT.UPD_IND(p_ses,p_gb,v_ur,v_where_atl,v_nr);
+END IF;
+--====================== upd_oil
+if rec1.t='V3_AB1C1**' then
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','R'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','S'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','H'), v_nr);
+else
+P_ANLT.upd_anlt ( p_ses, rec1.numg, rec1.t, v_nr);
+end if;
+P_ANLT.DEL_NULL(p_ses);
+P_ANLT.ins_itg_anlt
+( p_ses, rec1.numg, rec1.t, v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.count_nzo_T ( p_ses);
+
+if rec1.t='v3_AB1C1**' then
+P_ANLT.ins_itg_anlt
+( p_ses, rec1.numg, replace(rec1.t,'**','R'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.ins_itg_anlt
+( p_ses, rec1.numg, replace(rec1.t,'**','H'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.ins_itg_anlt
+( p_ses, rec1.numg, replace(rec1.t,'**','S'), v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+else
+P_ANLT.ins_itg_anlt
+( p_ses, rec1.numg, rec1.t, v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+		end if;
+P_ANLT.count_nzo_T ( p_ses);
+
+if p_ur in ('G','C' ) then
+P_ANLT.ins_itg_GAS( p_ses);
+end if;
+--======================итоги по отчету--включила итоги для всех таблиц
+P_ANLT.ins_wsego (p_ses);
+P_EXCEL_ATL.EXE(:GLOBAL.ses,v_where,substr(to_char(:ALLGB.GB),3,2));
+DELETE from EXCEL_ATL where ses=v_SES;
+DELETE from REPORT_EXCEL_ATL_SN where ses=v_SES;
+DELETE from REPORT_ATL_SPIS where ses=v_SES;
+insert_table(v_where);
+INS_NUMG_UR(v_ses, v_gb, v_numR);
+delete_vidG(v_ses);
+
+if v_numR=3 then
+ update_pct(v_ses, v_numR);
+end if;
+
+
+
+   elsif :bl_but.old_VID_REPORT ='TKZ' then
+
+
+PREPARE_ANALIT_TKZ(:GLOBAL.ses, substr(to_char(:ALLGB.GB),3,2), v_where,:BL_BUT.VID_BALANS );
+
+P_ANLT.ins_anlt
+(p_ses,p_gb,v_ur1,replace(v_where_atl,'P_GG',TO_CHAR(v_tt)), v_vch, v_vt,v_vgr, v_tch_atl, v_tz_atl1, v_nr);
+
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GR',replace(v_where_atl,'P_GG',TO_CHAR(v_tt)),  v_vch, replace(v_vt,'**','R'), replace(v_vgr,'**','R'), v_tch_atl, replace(v_tz_atl2,'**','R'), v_nr);
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GH',replace(v_where_atl,'P_GG',TO_CHAR(v_tt)),  v_vch, replace(v_vt,'**','H'), replace(v_vgr,'**','H'), v_tch_atl, replace(v_tz_atl2,'**','H'),v_nr);
+P_ANLT.ins_anlt
+(p_ses,p_gb,'GS',replace(v_where_atl,'P_GG',TO_CHAR(v_tt)),  v_vch, replace(v_vt,'**','G'), replace(v_vgr,'**','G'),v_tch_atl,replace(v_tz_atl2,'**','G'),v_nr);
+
+P_ANLT.ins_anlt
+(p_ses,p_gb,'CS',replace(v_where_atl,'P_GG',TO_CHAR(v_tt)), v_vch, v_vt,v_vgr, v_tch_atl, replace(v_tz_atl3,'**','S'), v_nr);
+P_ANLT.ins_anlt
+(p_ses,p_gb,'CH',replace(v_where_atl,'P_GG',TO_CHAR(v_tt)), v_vch, v_vt, v_vgr, v_tch_atl, replace(v_tz_atl3,'**','H'),v_nr);
+--======================
+if rec1.t='V3_ABC**' then
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','R'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','S'), v_nr);
+P_ANLT.upd_anlt ( p_ses, rec1.numg,replace(rec1.t,'**','H'), v_nr);
+else
+P_ANLT.upd_anlt ( p_ses, rec1.numg, rec1.t, v_nr);
+end if;
+
+P_ANLT.DEL_NULL(p_ses);
+P_ANLT.ins_itg_tkz ( p_ses,  v_vch,to_char(rec1.numg), V_sort_itg, rec1.text2, rec1.content);
+P_ANLT.ins_itg_tkz_gas ( p_ses);
+P_ANLT.ins_wsego (p_ses);
+
+P_EXCEL_ATL.EXE(:GLOBAL.ses,v_where,substr(to_char(:ALLGB.GB),3,2));
+
+IF :bl_but.NR  in (1) THEN
+      repname := 'atl_r1_NC.rep';
+
+      ELSIF :bl_but.NR  in (2,3,5) THEN
+      repname := 'atl_r_NC.rep';
+
+     ELSIF :bl_but.NR  in (6) THEN
+      repname := 'atl_r6_NC.rep';
+
+     ELSIF :bl_but.NR  in (7) THEN
+      repname := 'atl_r7_NC.rep';
+
+     ELSIF :bl_but.NR  in (8) THEN
+      repname := 'atl_r8_NC.rep';
+
+    ELSIF  :bl_but.NR =4 THEN
+      repname := 'atl_R4_NC.rep';
+
+
+else
+  repname := 'atl_GR_NC.REP';
