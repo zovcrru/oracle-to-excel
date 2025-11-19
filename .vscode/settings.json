@@ -22,7 +22,7 @@
   "terminal.integrated.profiles.windows": {
     "PowerShell": {
       "source": "PowerShell",
-      "icon": "terminal-powershell"
+      "icon": "terminal-powershell",
     },
     "Command Prompt": {
       "path": [
@@ -40,7 +40,7 @@
         "/k D:\\Utils\\System\\cmder\\vendor\\init.bat"
       ],
       "icon": "terminal-cmd",
-    }
+    },
   },
   "terminal.integrated.defaultProfile.windows": "cmder",
   "terminal.integrated.copyOnSelection": true,
@@ -64,5 +64,6 @@
   "editor.inlayHints.maximumLength": 0,
   "editor.defaultFormatter": "charliermarsh.ruff",
   "terminal.integrated.shellIntegration.decorationsEnabled": "never",
-  "terminal.integrated.shellIntegration.enabled": false,
+  "terminal.integrated.shellIntegration.enabled": true,
+  "chat.editor.fontSize": 16,
 }

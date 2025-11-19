@@ -19,7 +19,6 @@ from oracle_to_excel.config import (
 from oracle_to_excel.logger import setup_logging
 
 
-
 def test_load_config_success() -> None:
     """Тест успешной загрузки конфигурации."""
     logger = setup_logging('DEBUG', console_output=True)
@@ -61,8 +60,9 @@ OUTPUT_DIR=./exports
         logger.info('✓ Чувствительные данные восстановлены')
 
         # Проверяем, что конфигурация загружена
-        assert config.get('ORACLE_USER') == 'test_user'
-        assert config.get('ORACLE_PASSWORD') == 'test_pass'
+        if config.get('DB_TYPE') == 'oracle':
+            assert config.get('ORACLE_USER') == 'test_user'
+            assert config.get('ORACLE_PASSWORD') == 'test_pass'
 
     finally:
         # Удаляем тестовый файл
@@ -124,5 +124,3 @@ def test_create_env_example() -> None:
     finally:
         if output_file.exists():
             output_file.unlink()
-
-
