@@ -244,23 +244,7 @@ def _mask_sqlite_uri(uri: str) -> str:
         return f'sqlite:///**/{filename}'
 
 
-def _mask_connection_string(
-    connection_string: str,
-) -> str:
-    """Маскирует connection string, оставляя схему, хост и username."""
-    try:
-        parsed = urlparse(connection_string)
-    except Exception:
-        return '***'
-
-    # SQLite - особый случай (нет hostname)
-    if parsed.scheme == 'sqlite':
-        if parsed.path:
-            # Извлекаем только имя файла из пути
-            filename = Path(parsed.path.lstrip('/')).name
-            return f'sqlite:///**/{filename}'
-        return 'sqlite:///***'
-
+def _parsed_connection_string(parsed) -> list[str]:
     # Oracle/PostgreSQL - собираем строку по частям
     result_parts = [f'{parsed.scheme}://']
 
@@ -284,6 +268,27 @@ def _mask_connection_string(
     if parsed.path:
         result_parts.append(parsed.path)
 
+    return result_parts
+
+
+def _mask_connection_string(
+    connection_string: str,
+) -> str:
+    """Маскирует connection string, оставляя схему, хост и username."""
+    try:
+        parsed = urlparse(connection_string)
+    except Exception:
+        return '***'
+
+    # SQLite - особый случай (нет hostname)
+    if parsed.scheme == 'sqlite':
+        if parsed.path:
+            # Извлекаем только имя файла из пути
+            filename = Path(parsed.path.lstrip('/')).name
+            return f'sqlite:///**/{filename}'
+        return 'sqlite:///***'
+
+    result_parts = _parsed_connection_string(parsed)
     return ''.join(result_parts)
 
 
