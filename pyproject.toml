@@ -1,5 +1,6 @@
 [project]
-name = "oracle-to-excel"
+#name = "oracle-to-excel"
+name = "oracle_to_excel"
 version = "0.1.0"
 description = "Export Oracle REPORT_EXCEL_SN table data to Excel with logging and error handling"
 authors = [
