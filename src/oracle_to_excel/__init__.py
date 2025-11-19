@@ -5,6 +5,4 @@ Oracle to Excel Exporter.
 Использует функциональный подход и возможности Python 3.14.
 """
 
-from __future__ import annotations
-
 __version__ = '1.0.0'

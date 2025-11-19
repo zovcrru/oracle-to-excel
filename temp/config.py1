@@ -1,0 +1,186 @@
+def _validate_db_type(config: ConfigDict, errors: list[str], logger: logging.Logger | None) -> None:
+    """Валидирует тип базы данных."""
+    db_type = config.get('DB_TYPE', '')
+    if not isinstance(db_type, str):
+        msg = 'DB_TYPE должен быть строкой'
+        errors.append(msg)
+        if logger:
+            logger.error(msg)
+        return
+
+    if db_type.lower() in VALID_DB_TYPES:
+        if logger:
+            logger.debug('DB_TYPE валиден: %s', db_type)
+        return
+
+    msg = f"Некорректный DB_TYPE: '{db_type}'. Допустимые значения: {', '.join(VALID_DB_TYPES)}"
+    errors.append(msg)
+    if logger:
+        logger.error(msg)
+
+ def _validate_output_dir(
+     config: ConfigDict,
+     errors: list[str],
+     logger: logging.Logger | None,
+ ) -> None:
+     """Валидирует директорию для экспорта."""
+     output_dir = config.get('OUTPUT_DIR', './exports')
+     if not isinstance(output_dir, str):
+         return
+
+     dir_path = Path(output_dir)
+     if not _create_output_directory(dir_path, errors, logger):
+         return
+
+     _check_directory_permissions(dir_path, errors, logger)
+
+# можно убрать эту функцию после тестов
+def _create_output_directory(
+    dir_path: Path,
+    errors: list[str],
+    logger: logging.Logger | None,
+) -> bool:
+    """Создает директорию для экспорта."""
+    try:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        error = f'Не удалось создать OUTPUT_DIR: {e}'
+        errors.append(error)
+        if logger:
+            logger.exception(error)
+        return False
+
+    if logger:
+        logger.debug('Директория для экспорта: %s', dir_path.absolute())
+    return True
+
+def _validate_db_type(
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None = None,
+) -> None:
+    """Валидирует тип базы данных."""
+    # DB_TYPE обязателен и всегда str по аннотации TypedDict
+    db_type = config['DB_TYPE']
+    if not isinstance(db_type, str):
+        msg = 'DB_TYPE должен быть строкой'
+        errors.append(msg)
+        if logger is not None:
+            logger.error(msg)
+        return
+    # Использован casefold(), который более общий, чем lower(), но с точки зрения типизации
+    # это тот же str
+    db_type_normalized = db_type.casefold()
+
+    if db_type_normalized in VALID_DB_TYPES:
+        if logger is not None:
+            logger.debug('DB_TYPE валиден: %s', db_type)
+        return
+
+    msg = (
+        f"Некорректный DB_TYPE: '{db_type}'. "
+        f'Допустимые значения: {", ".join(sorted(VALID_DB_TYPES))}'
+    )
+    errors.append(msg)
+    if logger is not None:
+        logger.error(msg)
+
+
+def validate_config(
+    config: ConfigDict,
+    logger: logging.Logger | None = None,
+) -> tuple[bool, list[str]]:
+    """Валидирует параметры конфигурации."""
+    errors: list[str] = []
+
+    if logger:
+        logger.debug('Начало валидации конфигурации')
+
+    _validate_required_params(config, errors, logger)
+    _validate_db_type(config, logger)
+    _validate_connection_string(config, errors, logger)
+    _validate_log_level(config, errors, logger)
+    _validate_numeric_params(config, errors, logger)
+    _validate_output_dir(config, errors, logger)
+
+    is_valid = len(errors) == 0
+
+    if logger:
+        if is_valid:
+            logger.info('✓ Конфигурация валидна')
+        else:
+            logger.error('✗ Валидация провалена: %d ошибок', len(errors))
+
+    return (is_valid, errors)
+
+def _validate_log_level(
+    config: ConfigDict,
+    errors: list[str],
+    logger: logging.Logger | None = None,
+) -> None:
+    log_level_raw = config.get('LOG_LEVEL')
+
+    # Явно обрабатываем отсутствие параметра и некорректный тип
+    if log_level_raw is None:
+        normalized = 'INFO'
+    else:
+        if not isinstance(log_level_raw, str):
+            msg = 'LOG_LEVEL должен быть строкой'
+            errors.append(msg)
+            if logger is not None:
+                logger.error(msg)
+            return
+        normalized = log_level_raw.upper()
+
+    if normalized not in VALID_LOG_LEVELS:
+        msg = (
+            f"Некорректный LOG_LEVEL: '{log_level_raw}'. "
+            f'Допустимые значения: {", ".join(sorted(VALID_LOG_LEVELS))}'
+        )
+        errors.append(msg)
+        if logger is not None:
+            logger.error(msg)
+
+def _test_module() -> None:
+    """Тестирует модуль конфигурации."""
+    from oracle_to_excel.logger import setup_logging  # noqa: PLC0415
+
+    logger = setup_logging('DEBUG', console_output=True)
+    logger.info('Тестирование модуля config.py...')
+
+    test_env = Path('.env.test')
+    test_env.write_text(
+        """
+DB_TYPE=postgresql
+CONNECTION_STRING=postgresql://test_user:test_pass@localhost:5432/testdb
+LOG_LEVEL=DEBUG
+OUTPUT_DIR=./test_exports
+FETCH_ARRAY_SIZE=1000
+""",
+        encoding='utf-8',
+    )
+
+    try:
+        config = load_config('.env.test')
+        logger.info('✓ Конфигурация загружена')
+
+        valid, errors = validate_config(config, logger)
+        if valid:
+            logger.info('✓ Конфигурация валидна')
+        else:
+            logger.error('✗ Ошибки валидации: %s', errors)
+
+        print_config_summary(config, logger=logger)
+        restore_sensitive_data(cast(dict[str, str | int | bool], config), logger)
+        logger.info('✓ Чувствительные данные восстановлены')
+
+    finally:
+        if test_env.exists():
+            test_env.unlink()
+            logger.info('✓ Тестовый файл удален')
+
+        test_dir = Path('./test_exports')
+        if test_dir.exists():
+            test_dir.rmdir()
+            logger.info('✓ Тестовая директория удалена')
+

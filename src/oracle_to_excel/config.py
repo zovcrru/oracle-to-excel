@@ -6,33 +6,32 @@
 Поддерживает Oracle и PostgreSQL через connection strings.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Final, NotRequired, TypedDict, cast
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from oracle_to_excel.logger import get_logger
 
 try:
     from dotenv import load_dotenv
 except ImportError:
-    print('Ошибка: требуется установить python-dotenv')
-    print('Выполните: pip install python-dotenv')
+    logger = get_logger('config')
+    logger.exception('Ошибка: требуется установить python-dotenv')
+    logger.exception('Выполните: pip install python-dotenv')
     sys.exit(1)
 
 
 class ConfigDict(TypedDict):
     """Структура конфигурации приложения."""
 
-    DB_TYPE: object
+    DB_TYPE: str
     DB_CONNECT_URI: str
-    LOG_LEVEL: NotRequired[object]  # было NotRequired[str]
-    OUTPUT_DIR: NotRequired[object]
+    LOG_LEVEL: NotRequired[str]
+    OUTPUT_DIR: NotRequired[str]
     FETCH_ARRAY_SIZE: NotRequired[int]
     CHUNK_SIZE: NotRequired[int]
     QUERY_TIMEOUT: NotRequired[int]
@@ -62,7 +61,7 @@ VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
     {
         'oracle',
         'postgresql',
-        'postgressqlite',
+        'sqlite',
     }
 )
 
@@ -244,7 +243,7 @@ def _mask_sqlite_uri(uri: str) -> str:
         return f'sqlite:///**/{filename}'
 
 
-def _parsed_connection_string(parsed) -> list[str]:
+def _parsed_connection_string(parsed: ParseResult) -> list[str]:
     # Oracle/PostgreSQL - собираем строку по частям
     result_parts = [f'{parsed.scheme}://']
 
@@ -292,34 +291,6 @@ def _mask_connection_string(
     return ''.join(result_parts)
 
 
-def validate_config(
-    config: ConfigDict,
-    logger: logging.Logger | None = None,
-) -> tuple[bool, list[str]]:
-    """Валидирует параметры конфигурации."""
-    errors: list[str] = []
-
-    if logger:
-        logger.debug('Начало валидации конфигурации')
-
-    _validate_required_params(config, errors, logger)
-    _validate_db_type(config, errors, logger)
-    _validate_connection_string(config, errors, logger)
-    _validate_log_level(config, errors, logger)
-    _validate_numeric_params(config, errors, logger)
-    _validate_output_dir(config, errors, logger)
-
-    is_valid = len(errors) == 0
-
-    if logger:
-        if is_valid:
-            logger.info('✓ Конфигурация валидна')
-        else:
-            logger.error('✗ Валидация провалена: %d ошибок', len(errors))
-
-    return (is_valid, errors)
-
-
 def _validate_required_params(
     config: ConfigDict,
     errors: list[str],
@@ -335,35 +306,27 @@ def _validate_required_params(
 
 
 def _validate_db_type(
-    config: ConfigDict,
-    errors: list[str],
+    db_type: str | None,
     logger: logging.Logger | None = None,
-) -> None:
-    """Валидирует тип базы данных."""
-    # DB_TYPE обязателен и всегда str по аннотации TypedDict
-    db_type = config['DB_TYPE']
+) -> int:
     if not isinstance(db_type, str):
-        msg = 'DB_TYPE должен быть строкой'
-        errors.append(msg)
-        if logger is not None:
-            logger.error(msg)
-        return
-    # Использован casefold(), который более общий, чем lower(), но с точки зрения типизации
-    # это тот же str
-    db_type_normalized = db_type.casefold()
+        if logger:
+            logger.error('DB_TYPE должен быть строкой')
+        return 1
 
-    if db_type_normalized in VALID_DB_TYPES:
-        if logger is not None:
-            logger.debug('DB_TYPE валиден: %s', db_type)
-        return
+    normalized = db_type.casefold()
 
-    msg = (
-        f"Некорректный DB_TYPE: '{db_type}'. "
-        f'Допустимые значения: {", ".join(sorted(VALID_DB_TYPES))}'
-    )
-    errors.append(msg)
-    if logger is not None:
-        logger.error(msg)
+    if normalized in VALID_DB_TYPES:
+        return 0
+
+    if logger:
+        valid_types = ', '.join(sorted(VALID_DB_TYPES))
+        logger.error(
+            'Некорректный DB_TYPE: %s. Допустимые: %s',
+            db_type,
+            valid_types,
+        )
+    return 1
 
 
 def _validate_connection_string(
@@ -418,20 +381,31 @@ def _validate_log_level(
     errors: list[str],
     logger: logging.Logger | None = None,
 ) -> None:
-    log_level = config.get('LOG_LEVEL', 'INFO')
+    """Validate and normalize LOG_LEVEL configuration parameter.
 
-    if not isinstance(log_level, str):
-        msg = 'LOG_LEVEL должен быть строкой'
-        errors.append(msg)
-        if logger is not None:
-            logger.error(msg)
-        return
+    Args:
+        config: Configuration dictionary
+        errors: List to append validation errors to
+        logger: Optional logger instance for error logging
+    """
+    # broaden static type so match/case default arm remains reachable for type checkers
+    log_level_raw: object = config.get('LOG_LEVEL')
 
-    normalized = log_level.upper()
+    match log_level_raw:
+        case None:
+            normalized = 'INFO'
+        case s if isinstance(s, str):
+            normalized = s.upper()
+        case _:
+            msg = 'LOG_LEVEL должен быть строкой'
+            errors.append(msg)
+            if logger is not None:
+                logger.error(msg)
+            return
 
     if normalized not in VALID_LOG_LEVELS:
         msg = (
-            f"Некорректный LOG_LEVEL: '{log_level}'. "
+            f"Некорректный LOG_LEVEL: '{log_level_raw}'. "
             f'Допустимые значения: {", ".join(sorted(VALID_LOG_LEVELS))}'
         )
         errors.append(msg)
@@ -489,36 +463,17 @@ def _validate_output_dir(
     errors: list[str],
     logger: logging.Logger | None,
 ) -> None:
-    """Валидирует директорию для экспорта."""
-    output_dir = config.get('OUTPUT_DIR', './exports')
-    if not isinstance(output_dir, str):
-        return
+    output_dir = Path(config.get('OUTPUT_DIR', './exports'))
 
-    dir_path = Path(output_dir)
-    if not _create_output_directory(dir_path, errors, logger):
-        return
-
-    _check_directory_permissions(dir_path, errors, logger)
-
-
-def _create_output_directory(
-    dir_path: Path,
-    errors: list[str],
-    logger: logging.Logger | None,
-) -> bool:
-    """Создает директорию для экспорта."""
     try:
-        dir_path.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        error = f'Не удалось создать OUTPUT_DIR: {e}'
-        errors.append(error)
-        if logger:
-            logger.exception(error)
-        return False
+        errors.append(f'Не удалось создать OUTPUT_DIR: {e}')
+        return
 
-    if logger:
-        logger.debug('Директория для экспорта: %s', dir_path.absolute())
-    return True
+    if not output_dir.is_dir():
+        errors.append(f'OUTPUT_DIR не является директорией: {output_dir}')
+    _check_directory_permissions(output_dir, errors, logger)
 
 
 def _check_directory_permissions(
@@ -718,56 +673,10 @@ LOG_LEVEL=INFO
             print(msg)
 
 
-def _test_module() -> None:
-    """Тестирует модуль конфигурации."""
-    from oracle_to_excel.logger import setup_logging  # noqa: PLC0415
-
-    logger = setup_logging('DEBUG', console_output=True)
-    logger.info('Тестирование модуля config.py...')
-
-    test_env = Path('.env.test')
-    test_env.write_text(
-        """
-DB_TYPE=postgresql
-CONNECTION_STRING=postgresql://test_user:test_pass@localhost:5432/testdb
-LOG_LEVEL=DEBUG
-OUTPUT_DIR=./test_exports
-FETCH_ARRAY_SIZE=1000
-""",
-        encoding='utf-8',
-    )
-
-    try:
-        config = load_config('.env.test')
-        logger.info('✓ Конфигурация загружена')
-
-        valid, errors = validate_config(config, logger)
-        if valid:
-            logger.info('✓ Конфигурация валидна')
-        else:
-            logger.error('✗ Ошибки валидации: %s', errors)
-
-        print_config_summary(config, logger=logger)
-        restore_sensitive_data(cast(dict[str, str | int | bool], config), logger)
-        logger.info('✓ Чувствительные данные восстановлены')
-
-    finally:
-        if test_env.exists():
-            test_env.unlink()
-            logger.info('✓ Тестовый файл удален')
-
-        test_dir = Path('./test_exports')
-        if test_dir.exists():
-            test_dir.rmdir()
-            logger.info('✓ Тестовая директория удалена')
-
-
 if __name__ == '__main__':
     import sys
 
     match sys.argv:
-        case [_, '--test']:
-            _test_module()
         case [_, '--create-example']:
             create_env_example()
         case _:

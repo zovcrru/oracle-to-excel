@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 import os
 import platform
 import sqlite3
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path as _Path
 from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
@@ -155,8 +153,6 @@ def detect_db_type(connection_string: ConnectionString) -> DBType:
         return 'postgresql'
 
     raise DatabaseTypeDetectionError(f'Не удалось определить тип БД: {connection_string}')
-    # safety fallback for static analyzers
-    raise DatabaseTypeDetectionError(f'Не удалось определить тип БД: {connection_string}')
 
 
 @log_execution_time
@@ -220,84 +216,52 @@ def create_connection(
     raise ValueError(f'Неподдерживаемый тип БД: {db_type}')
 
 
-# Multi-platform setup
-def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> None:
-    """
-    Инициализация Oracle thick mode для подключения к старым версиям БД.
+# Multi-platform helpers for Oracle thick-mode initialization
+def _normalize_lib_dir(lib_dir: _Path | str | None) -> str | None:
+    if isinstance(lib_dir, _Path):
+        return str(lib_dir)
+    if isinstance(lib_dir, str) or lib_dir is None:
+        return lib_dir
+    raise TypeError('lib_dir must be a Path, str or None')
 
-    Thick mode требуется для Oracle Database 11.2 и старше.
-    Thin mode поддерживает только Oracle DB 12.1+.
 
-    Args:
-        lib_dir: Путь к библиотекам Oracle Instant Client.
-                 Может быть Path, str или None (автоопределение).
+def _autodetect_windows_instantclient() -> str | None:
+    cand = _Path(r'd:\instantclient_12_1')
+    return str(cand) if cand.exists() else None
 
-    Raises:
-        RuntimeError: Если не удалось инициализировать thick mode.
 
-    Examples:
-        >>> init_oracle_thick_mode()  # Автоопределение
-        >>> init_oracle_thick_mode(_Path('C:/oracle/instantclient_23_5'))
-        >>> init_oracle_thick_mode('C:/oracle/instantclient_23_5')
-    """
-    global _thick_mode_initialized
-
-    # Проверяем, не инициализирован ли уже
-    if _thick_mode_initialized:
-        return
-
-    print(lib_dir)
-    # Автоопределение пути к библиотекам если не указан
-    if lib_dir is None and platform.system() == 'Windows':
-        possible_paths = [
-            _Path(r'd:\instantclient_12_1'),  # Ваш путь,
-        ]
-        for path in possible_paths:
-            if path.exists():
-                lib_dir = path
-                break
-
-    # Преобразование типов с помощью match-case
-    match lib_dir:
-        case _Path():
-            # Path объект - конвертируем в строку
-            lib_dir_str = str(lib_dir)
-        case str():
-            # Уже строка - используем как есть
-            lib_dir_str = lib_dir
-        case None:
-            # None - оставляем None для автоопределения
-            lib_dir_str = None
-        case _:
-            # Неожиданный тип
-            raise TypeError(f'lib_dir должен быть Path, str или None, получен {type(lib_dir)}')
-
-    # Добавляем путь в PATH если его нет (для Windows)
+def _ensure_path_contains(lib_dir_str: str | None) -> None:
     if lib_dir_str and platform.system() == 'Windows':
-        current_path = os.environ.get('PATH', '')
-        if lib_dir_str not in current_path:
-            os.environ['PATH'] = f'{lib_dir_str};{current_path}'
-            print(f'Добавлен в PATH: {lib_dir_str}')
-    # Проверяем наличие oci.dll
+        current = os.environ.get('PATH', '')
+        if lib_dir_str not in current:
+            os.environ['PATH'] = f'{lib_dir_str};{current}'
+
+
+def _verify_oci_presence(lib_dir_str: str | None) -> None:
     if lib_dir_str:
-        oci_path = _Path(lib_dir_str) / 'oci.dll'
-        if not oci_path.exists():
-            raise FileNotFoundError(
-                f'Файл oci.dll не найден в {lib_dir_str}\nПроверьте установку Oracle Instant Client'
-            )
-    # Инициализируем thick mode
+        oci = _Path(lib_dir_str) / 'oci.dll'
+        if not oci.exists():
+            raise FileNotFoundError(f'oci.dll not found in {lib_dir_str}')
+
+
+# Multi-platform setup
+def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> bool:
+    """Initialize Oracle thick client support (best-effort).
+
+    Returns True on successful init, raises on fatal errors.
+    """
+    lib_dir_str = _normalize_lib_dir(lib_dir)
+    if lib_dir_str is None and platform.system() == 'Windows':
+        lib_dir_str = _autodetect_windows_instantclient()
+
+    _ensure_path_contains(lib_dir_str)
+    _verify_oci_presence(lib_dir_str)
+
     try:
         oracledb.init_oracle_client(lib_dir=lib_dir_str)
-        _thick_mode_initialized = True
     except Exception as e:
-        raise RuntimeError(
-            f'Ошибка инициализации Oracle thick mode: {e}\n\n'
-            f'Возможные причины:\n'
-            f'1. Не установлен Visual C++ 2010 Redistributable\n'
-            f'   Скачайте: https://www.microsoft.com/download/details.aspx?id=26999\n'
-            f'2. Отсутствуют DLL зависимости в {lib_dir_str}\n'
-            f'3. Путь не добавлен в системную переменную PATH'
-        ) from e
+        raise RuntimeError(f'Failed to init Oracle thick mode: {e}') from e
+    return True
 
 
 def _create_oracle_connection(
@@ -315,14 +279,14 @@ def _create_oracle_connection(
     dsn = oracledb.makedsn(host, port, service_name=parsed.path.lstrip('/'))
     # Включаем thick mode если требуется
     if thick_mode:
-        init_oracle_thick_mode(lib_dir=lib_dir)
+        # best-effort initialization; errors will propagate if critical
+        _ = init_oracle_thick_mode(lib_dir=lib_dir)
     conn = oracledb.connect(
         user=parsed.username,
         password=parsed.password,
         dsn=dsn,
         config_dir=None,
         disable_oob=True,
-        # timeout=timeout,
     )
     if read_only:
         cursor = conn.cursor()
@@ -348,56 +312,44 @@ def _create_postgresql_connection(
     return cast(DatabaseConnection, conn)
 
 
+def _resolve_sqlite_path(conn_str: str) -> tuple[str, bool]:
+    parsed = urlparse(conn_str)
+    db_path_local = conn_str
+    if parsed.scheme and parsed.scheme.startswith('sqlite'):
+        db_path_local = parsed.path.lstrip('/') or parsed.netloc or db_path_local
+
+    use_uri_local = db_path_local.startswith('file:') or '://' in conn_str
+
+    if use_uri_local:
+        return db_path_local, use_uri_local
+
+    p = _Path(db_path_local)
+    if p.is_absolute():
+        return db_path_local, use_uri_local
+
+    cand = _Path.cwd() / p
+    if cand.exists():
+        return str(cand), use_uri_local
+
+    module_dir = _Path(__file__).resolve().parent
+    cand2 = module_dir / p
+    if cand2.exists():
+        return str(cand2), use_uri_local
+
+    parent = cand2.parent
+    with suppress(Exception):
+        parent.mkdir(parents=True, exist_ok=True)
+    return str(cand2), use_uri_local
+
+
 def _create_sqlite_connection(
     connection_string: ConnectionString,
     *,
     timeout: int,
 ) -> DatabaseConnection:
-    # Поддерживаем несколько вариантов указания sqlite-пути:
-    # - plain file path: "lice.sqlite3"
-    # - sqlalchemy style: "sqlite:///lice.sqlite3" (parsed.path -> '/lice.sqlite3')
-    # - file URI: "file:..." (поддерживается через uri=True)
-    parsed = urlparse(connection_string)
-    db_path = connection_string
-    if parsed.scheme and parsed.scheme.startswith('sqlite'):
-        # для 'sqlite:///file.db' parsed.path == '/file.db'
-        if parsed.path:
-            db_path = parsed.path.lstrip('/')
-        elif parsed.netloc:
-            db_path = parsed.netloc
+    db_path, use_uri = _resolve_sqlite_path(connection_string)
 
-    # Решаем, нужно ли включать режим uri для sqlite3.connect
-    use_uri = False
-    if db_path.startswith('file:') or '://' in connection_string:
-        use_uri = True
-
-    # Если путь не uri и относительный, попробуем разрешить его относительно
-    # текущей рабочей директории, а затем относительно директории модуля
-    if not use_uri:
-        p = _Path(db_path)
-        if not p.is_absolute():
-            cand = _Path.cwd() / p
-            if cand.exists():
-                db_path = str(cand)
-            else:
-                module_dir = _Path(__file__).resolve().parent
-                cand2 = module_dir / p
-                if cand2.exists():
-                    db_path = str(cand2)
-                else:
-                    # Если ни в одной из директорий файл не найден, создаём родительскую директорию
-                    # чтобы sqlite мог создать файл, если это ожидаемое поведение
-                    parent = cand2.parent
-                    try:
-                        parent.mkdir(parents=True, exist_ok=True)
-                    except Exception:
-                        # не фатально — sqlite выведет понятную ошибку
-                        pass
-                    db_path = str(cand2)
-
-    # Создаём подключение корректно — sqlite3.connect не поддерживает kwarg autocommit
     if use_uri:
-        # sqlite3 expects a file: URI when uri=True; ensure proper prefix
         if not db_path.startswith('file:'):
             db_path = 'file:' + db_path
         conn = sqlite3.connect(db_path, timeout=timeout, uri=True)
