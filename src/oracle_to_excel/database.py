@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import platform
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -121,6 +123,10 @@ class DatabaseTypeDetectionError(ValueError):
     """
 
 
+# Global flag to track initialization
+_thick_mode_initialized = False
+
+
 def detect_db_type(connection_string: ConnectionString) -> DBType:
     """
     Determine the database type from the connection string.
@@ -195,9 +201,10 @@ def create_connection(
             return _create_oracle_connection(
                 connection_string,
                 read_only=read_only,
-                timeout=timeout,
+                thick_mode=True,
+                lib_dir=r'd:\instantclient_12_1',
             )
-        case 'postgresql':
+        case 'postgresql' | 'postgres':
             return _create_postgresql_connection(
                 connection_string,
                 read_only=read_only,
@@ -206,7 +213,6 @@ def create_connection(
         case 'sqlite':
             return _create_sqlite_connection(
                 connection_string,
-                read_only=read_only,
                 timeout=timeout,
             )
 
@@ -214,11 +220,92 @@ def create_connection(
     raise ValueError(f'Неподдерживаемый тип БД: {db_type}')
 
 
+# Multi-platform setup
+def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> None:
+    """
+    Инициализация Oracle thick mode для подключения к старым версиям БД.
+
+    Thick mode требуется для Oracle Database 11.2 и старше.
+    Thin mode поддерживает только Oracle DB 12.1+.
+
+    Args:
+        lib_dir: Путь к библиотекам Oracle Instant Client.
+                 Может быть Path, str или None (автоопределение).
+
+    Raises:
+        RuntimeError: Если не удалось инициализировать thick mode.
+
+    Examples:
+        >>> init_oracle_thick_mode()  # Автоопределение
+        >>> init_oracle_thick_mode(_Path('C:/oracle/instantclient_23_5'))
+        >>> init_oracle_thick_mode('C:/oracle/instantclient_23_5')
+    """
+    global _thick_mode_initialized
+
+    # Проверяем, не инициализирован ли уже
+    if _thick_mode_initialized:
+        return
+
+    print(lib_dir)
+    # Автоопределение пути к библиотекам если не указан
+    if lib_dir is None and platform.system() == 'Windows':
+        possible_paths = [
+            _Path(r'd:\instantclient_12_1'),  # Ваш путь,
+        ]
+        for path in possible_paths:
+            if path.exists():
+                lib_dir = path
+                break
+
+    # Преобразование типов с помощью match-case
+    match lib_dir:
+        case _Path():
+            # Path объект - конвертируем в строку
+            lib_dir_str = str(lib_dir)
+        case str():
+            # Уже строка - используем как есть
+            lib_dir_str = lib_dir
+        case None:
+            # None - оставляем None для автоопределения
+            lib_dir_str = None
+        case _:
+            # Неожиданный тип
+            raise TypeError(f'lib_dir должен быть Path, str или None, получен {type(lib_dir)}')
+
+    # Добавляем путь в PATH если его нет (для Windows)
+    if lib_dir_str and platform.system() == 'Windows':
+        current_path = os.environ.get('PATH', '')
+        if lib_dir_str not in current_path:
+            os.environ['PATH'] = f'{lib_dir_str};{current_path}'
+            print(f'Добавлен в PATH: {lib_dir_str}')
+    # Проверяем наличие oci.dll
+    if lib_dir_str:
+        oci_path = _Path(lib_dir_str) / 'oci.dll'
+        if not oci_path.exists():
+            raise FileNotFoundError(
+                f'Файл oci.dll не найден в {lib_dir_str}\nПроверьте установку Oracle Instant Client'
+            )
+    # Инициализируем thick mode
+    try:
+        oracledb.init_oracle_client(lib_dir=lib_dir_str)
+        _thick_mode_initialized = True
+    except Exception as e:
+        raise RuntimeError(
+            f'Ошибка инициализации Oracle thick mode: {e}\n\n'
+            f'Возможные причины:\n'
+            f'1. Не установлен Visual C++ 2010 Redistributable\n'
+            f'   Скачайте: https://www.microsoft.com/download/details.aspx?id=26999\n'
+            f'2. Отсутствуют DLL зависимости в {lib_dir_str}\n'
+            f'3. Путь не добавлен в системную переменную PATH'
+        ) from e
+
+
 def _create_oracle_connection(
     connection_string: ConnectionString,
     *,
     read_only: bool,
-    timeout: int,
+    thick_mode: bool = True,
+    lib_dir: _Path | str | None = None,
 ) -> DatabaseConnection:
     parsed = urlparse(connection_string)
     host = parsed.hostname
@@ -226,13 +313,16 @@ def _create_oracle_connection(
         raise ValueError('Отсутствует hostname в строке подключения Oracle')
     port = parsed.port or 1521
     dsn = oracledb.makedsn(host, port, service_name=parsed.path.lstrip('/'))
+    # Включаем thick mode если требуется
+    if thick_mode:
+        init_oracle_thick_mode(lib_dir=lib_dir)
     conn = oracledb.connect(
         user=parsed.username,
         password=parsed.password,
         dsn=dsn,
         config_dir=None,
         disable_oob=True,
-        timeout=timeout,
+        # timeout=timeout,
     )
     if read_only:
         cursor = conn.cursor()
@@ -261,7 +351,6 @@ def _create_postgresql_connection(
 def _create_sqlite_connection(
     connection_string: ConnectionString,
     *,
-    read_only: bool,
     timeout: int,
 ) -> DatabaseConnection:
     # Поддерживаем несколько вариантов указания sqlite-пути:
@@ -364,7 +453,10 @@ def get_connection(
     connection = None
     try:
         connection = create_connection(
-            connection_string, db_type, read_only=read_only, timeout=timeout
+            connection_string,
+            db_type,
+            read_only=read_only,
+            timeout=timeout,
         )
         logger.debug('Context manager: подключение создано')
         yield connection
@@ -448,6 +540,39 @@ def postgres_info(
     return info
 
 
+def sqlite_info(
+    cursor,
+) -> dict[
+    str,
+    str | int,
+]:
+    """
+    Retrieves information about a PostgreSQL database connection.
+
+    This function executes SQL queries against a PostgreSQL database to gather
+    version and database name information.
+
+    Args:
+        cursor: A PostgreSQL database cursor object that implements the DBCursor protocol.
+               Used to execute queries against the database.
+
+    Returns:
+        A dictionary containing information about the PostgreSQL database:
+        - 'version': The PostgreSQL database version string
+        - 'database': The name of the connected PostgreSQL database
+    """
+    info = {}
+    cursor.execute('SELECT sqlite_version()')
+    result = cursor.fetchone()
+    if result:
+        info['version'] = result[0]
+    cursor.execute('SELECT name FROM pragma_database_list WHERE name="main"')
+    result = cursor.fetchone()
+    if result:
+        info['database'] = result[0]
+    return info
+
+
 def get_db_info(
     connection: DatabaseConnection,
     db_type: DBType,
@@ -471,6 +596,8 @@ def get_db_info(
     info_funcs = {
         'oracle': oracle_info,
         'postgresql': postgres_info,
+        'postgres': postgres_info,
+        'sqlite': sqlite_info,
     }
 
     cursor = connection.cursor()

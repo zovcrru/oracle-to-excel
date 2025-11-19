@@ -62,7 +62,7 @@ VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
     {
         'oracle',
         'postgresql',
-        'sqlite',
+        'postgressqlite',
     }
 )
 
@@ -215,21 +215,76 @@ def _get_masked_value(
     value: str | int | bool,
 ) -> str:
     """Возвращает замаскированное значение."""
-    if isinstance(value, str) and '://' in value:
-        return _mask_connection_string(value)
-    return '***'
+    # Type narrowing: проверяем, что value - строка
+    if not isinstance(value, str):
+        return '***'
+
+    # SQLite connection string: sqlite:///path/to/file.db
+    if value.startswith('sqlite://'):
+        return _mask_sqlite_uri(value)
+
+    return _mask_connection_string(value)
+
+
+def _mask_sqlite_uri(uri: str) -> str:
+    """Маскирует SQLite URI, оставляя только имя файла."""
+    # sqlite:///relative/path/to/file.db
+    # sqlite:////absolute/path/to/file.db
+
+    try:
+        # Убираем sqlite://
+        path_part = uri.replace('sqlite://', '', 1)
+        # Убираем ведущие слэши и извлекаем путь
+        path_clean = path_part.lstrip('/')
+        # Извлекаем имя файла
+        filename = Path(path_clean).name
+    except Exception:
+        return 'sqlite:///***'
+    else:
+        return f'sqlite:///**/{filename}'
 
 
 def _mask_connection_string(
     connection_string: str,
 ) -> str:
-    """Маскирует connection string, оставляя схему и хост."""
+    """Маскирует connection string, оставляя схему, хост и username."""
     try:
         parsed = urlparse(connection_string)
     except Exception:
         return '***'
+
+    # SQLite - особый случай (нет hostname)
+    if parsed.scheme == 'sqlite':
+        if parsed.path:
+            # Извлекаем только имя файла из пути
+            filename = Path(parsed.path.lstrip('/')).name
+            return f'sqlite:///**/{filename}'
+        return 'sqlite:///***'
+
+    # Oracle/PostgreSQL - собираем строку по частям
+    result_parts = [f'{parsed.scheme}://']
+
+    # Username (показываем, не чувствительный)
+    if parsed.username:
+        result_parts.append(f'{parsed.username}:***@')
     else:
-        return f'{parsed.scheme}://***@{parsed.hostname}:***'
+        result_parts.append('***@')
+
+    # Hostname
+    if parsed.hostname:
+        result_parts.append(parsed.hostname)
+    else:
+        result_parts.append('***')
+
+    # Port (только если указан)
+    if parsed.port:
+        result_parts.append(f':{parsed.port}')
+
+    # Path (база данных/сервис)
+    if parsed.path:
+        result_parts.append(parsed.path)
+
+    return ''.join(result_parts)
 
 
 def validate_config(

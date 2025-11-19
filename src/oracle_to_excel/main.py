@@ -86,6 +86,7 @@ def main() -> int:
 
     logger.info('Connection string %s прошел валидацию', connection_string)
 
+    connection_string = config.get('_original_DB_CONNECT_URI')
     if not _connect_and_log(connection_string, db_type, logger):
         return 1
 
