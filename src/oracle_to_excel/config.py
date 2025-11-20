@@ -60,8 +60,10 @@ VALID_LOG_LEVELS: Final[frozenset[str]] = frozenset(
 VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
     {
         'oracle',
+        'postgres',
         'postgresql',
         'sqlite',
+        'sqlite3',
     }
 )
 

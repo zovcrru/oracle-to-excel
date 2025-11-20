@@ -206,7 +206,7 @@ def create_connection(
                 read_only=read_only,
                 timeout=timeout,
             )
-        case 'sqlite':
+        case 'sqlite' | 'sqlite3':
             return _create_sqlite_connection(
                 connection_string,
                 timeout=timeout,
@@ -258,7 +258,10 @@ def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> bool:
     _verify_oci_presence(lib_dir_str)
 
     try:
-        oracledb.init_oracle_client(lib_dir=lib_dir_str)
+        oracledb.init_oracle_client(
+            lib_dir=r'D:\instantclient_12_1',
+            config_dir=r'D:\instantclient_12_1',
+        )
     except Exception as e:
         raise RuntimeError(f'Failed to init Oracle thick mode: {e}') from e
     return True
@@ -285,7 +288,7 @@ def _create_oracle_connection(
         user=parsed.username,
         password=parsed.password,
         dsn=dsn,
-        config_dir=None,
+        config_dir=False,
         disable_oob=True,
     )
     if read_only:
@@ -550,6 +553,7 @@ def get_db_info(
         'postgresql': postgres_info,
         'postgres': postgres_info,
         'sqlite': sqlite_info,
+        'sqlite3': sqlite_info,
     }
 
     cursor = connection.cursor()

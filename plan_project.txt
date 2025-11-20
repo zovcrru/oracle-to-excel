@@ -1,7 +1,6 @@
 ## Создание проекта oracle_to_excel с помощью uv и Python 3.14
 
 ### Шаг 1: Установка uv (если еще не установлен)
-
 **Linux/macOS:**
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -18,7 +17,6 @@ uv --version
 ```
 
 ### Шаг 2: Создание структуры проекта
-
 ```bash
 # Создание директории проекта
 mkdir oracle_to_excel
@@ -27,7 +25,6 @@ cd oracle_to_excel
 # Инициализация проекта с Python 3.14
 uv init --python 3.14
 ```
-
 Это создаст базовую структуру:
 ```
 oracle_to_excel/
@@ -36,9 +33,7 @@ oracle_to_excel/
 ```
 
 ### Шаг 3: Настройка pyproject.toml
-
 Отредактируйте `pyproject.toml`:
-
 ```toml
 [project]
 name = "oracle-to-excel"
@@ -140,8 +135,6 @@ ORACLE_PASSWORD=your_password_here
 ORACLE_DSN=hostname:1521/service_name
 
 # Connection Settings (опциональные)
-POOL_MIN=1
-POOL_MAX=5
 FETCH_ARRAY_SIZE=1000
 
 # Application Settings
@@ -160,7 +153,6 @@ PROGRESS_UPDATE_INTERVAL=100
 ```
 
 ### Шаг 7: Создание .gitignore
-
 ```bash
 cat > .gitignore << 'EOF'
 # Python

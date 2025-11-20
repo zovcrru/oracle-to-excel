@@ -6,6 +6,9 @@
 .logs/
 *.log
 
+# Exports
+exports/*.xlsx
+
 # Python
 __pycache__/
 *.py[cod]
@@ -22,8 +25,28 @@ env/
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 
 # Build artifacts
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+wheels/
+.eggs/
 *.egg-info/
+
+# uv
+.uv/
+uv.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
