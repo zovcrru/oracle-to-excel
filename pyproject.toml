@@ -16,6 +16,8 @@ dependencies = [
     "tqdm>=4.66.0",
     "psutil>=5.9.0",
     "psycopg>=3.2.12",
+    "pydantic>=2.12.4",
+    "pydantic-settings>=2.12.0",
 ]
 
 [project.optional-dependencies]

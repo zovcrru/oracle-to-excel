@@ -522,4 +522,5 @@ python main.py -t MY_TABLE -s SES001 --profile
 Используй все фичи Python 3.14, в аргументах функций после последнего элемента ставь запятую,
 в logging не используй f-string
 Use `logging.exception` instead of `logging.error`
+Вместо Optional используй union-синтаксисS
 не используй # type: ignore[literal-required]

@@ -18,6 +18,7 @@ try:
     import psycopg
 except ImportError as err:
     raise RuntimeError('Модуль psycopg3 не установлен.') from err
+
 try:
     import oracledb
 except ImportError as err:
@@ -26,7 +27,11 @@ except ImportError as err:
 from oracle_to_excel.logger import get_logger, log_execution_time
 
 # Типы с запятой (Python 3.14)
-type DBType = Literal['oracle', 'postgresql', 'sqlite']
+type DBType = Literal[
+    'oracle',
+    'postgresql',
+    'sqlite',
+]
 type ConnectionString = str
 
 
@@ -38,52 +43,18 @@ class DBCursor(Protocol):
     SQL queries, fetching results, and closing the cursor. This protocol
     enables static type-checking and interface validation for code working
     with different database backends.
-
-    Example of use:
-        cursor.execute("SELECT * FROM table")
-        row = cursor.fetchone()
-        cursor.close()
     """
 
     def execute(self, query: str, /) -> None:
-        """
-        Execute a database query.
-
-        This method executes the provided SQL query on the database.
-        The forward slash in the parameter list indicates that the query
-        parameter must be provided as a positional argument.
-
-        Args:
-            query: The SQL query string to execute.
-
-        Returns:
-            None: This method doesn't return a value.
-        """
+        """Execute a database query."""
         ...
 
     def fetchone(self) -> object:
-        """
-        Fetch the next row of a query result set.
-
-        This method retrieves the next row from the result set of a previously executed query.
-        If all rows have been fetched, it returns None.
-
-        Returns:
-            object: The next row as a single sequence, or None when no more data is available.
-        """
+        """Fetch the next row of a query result set."""
         ...
 
     def close(self) -> None:
-        """
-        Close the cursor and release associated resources.
-
-        This method closes the cursor, releasing any resources that were allocated during
-        its creation and use. After calling this method, the cursor should not be used
-        for any further operations.
-
-        Returns:
-            None: This method doesn't return a value.
-        """
+        """Close the cursor and release associated resources."""
         ...
 
 
@@ -112,51 +83,125 @@ class DatabaseTypeDetectionError(ValueError):
     Exception raised when the database type cannot be determined from the connection string.
 
     This error indicates that the provided connection string does not match a supported
-    database type (for example, Oracle or PostgreSQL). It is intended to signal
-    configuration issues or invalid input for database detection logic.
+    database type (Oracle, PostgreSQL, or SQLite).
+    """
+
+
+# Global flag to track initialization
+_thick_mode_initialized = False
+
+
+def detect_and_validate_db_type(
+    connection_string: ConnectionString,
+) -> tuple[DBType | Literal[''], bool, str]:
+    """
+    Определяет тип БД и валидирует connection string (объединенная функция).
+
+    Эта функция заменяет собой detect_db_type() + validate_connection_string(),
+    устраняя дублирование логики и упрощая код.
 
     Args:
-        message (str): Detailed error message explaining the failure.
+        connection_string: Строка подключения к БД.
 
-    Example:
-        >>> raise DatabaseTypeDetectionError(
-        ...     'Unable to determine database type from the given connection string.',
-        ... )
+    Returns:
+        Кортеж (db_type, is_valid, error_message):
+        - db_type: 'oracle' | 'postgresql' | 'sqlite' или '' если невалидно
+        - is_valid: True если строка валидна
+        - error_message: Описание ошибки или '' если валидно
 
-    Typically raised by:
-        - detect_db_type(connection_string)
+    Examples:
+        >>> detect_and_validate_db_type('oracle://user:pwd@host:1521/service')
+        ('oracle', True, '')
+
+        >>> detect_and_validate_db_type('')
+        ('', False, 'Connection string должен быть непустой строкой')
+
+        >>> detect_and_validate_db_type('invalid://xyz')
+        ('', False, 'Не удалось определить тип БД')
     """
+    logger = get_logger('database')
+
+    # 1. Проверка на пустоту
+    if not connection_string or not isinstance(connection_string, str):
+        return ('', False, 'Connection string должен быть непустой строкой')
+
+    # 2. Парсинг URL
+    try:
+        parsed = urlparse(connection_string)
+    except Exception as e:
+        return ('', False, f'Ошибка парсинга URL: {e}')
+
+    # 3. Определение типа БД (встроенная логика)
+    s = connection_string.lower()
+    db_type: DBType | Literal[''] = ''
+
+    if s.startswith(('oracle', 'oracle+cx_oracle', 'oracle+oracledb')):
+        db_type = 'oracle'
+    elif s.startswith(('postgresql', 'postgres', 'postgresql+psycopg', 'postgresql+psycopg3')):
+        db_type = 'postgresql'
+    elif s.startswith(('sqlite', 'sqlite3')) or s == ':memory:' or s.endswith(('.sqlite3', '.db')):
+        db_type = 'sqlite'
+    elif ':1521/' in s or ':1521@' in s:
+        db_type = 'oracle'
+    elif ':5432/' in s or ':5433/' in s or 'postgresql://' in s:
+        db_type = 'postgresql'
+
+    # Если тип не определен
+    if not db_type:
+        return ('', False, f'Не удалось определить тип БД: {connection_string}')
+
+    # 4. Валидация структуры URL в зависимости от типа
+    if db_type == 'sqlite':
+        # Для sqlite достаточно наличия пути или :memory:
+        if not (parsed.path or parsed.netloc or s == ':memory:'):
+            return ('', False, 'Отсутствует путь к sqlite базе')
+    # Для Oracle и PostgreSQL нужен hostname
+    elif parsed.hostname:
+        return ('', False, f'Отсутствует hostname для {db_type}')
+
+    logger.debug('Connection string валиден для %s', db_type)
+    return (db_type, True, '')
 
 
 def detect_db_type(connection_string: ConnectionString) -> DBType:
     """
-    Determine the database type from the connection string.
+    Определяет тип БД из connection string (legacy wrapper).
 
     Args:
-        connection_string: Database connection string.
+        connection_string: Строка подключения к БД.
 
     Returns:
-        Database type as a string literal ("oracle" or "postgresql").
+        Тип БД: 'oracle' | 'postgresql' | 'sqlite'
 
     Raises:
-        DatabaseTypeDetectionError: If the database type cannot be determined.
+        DatabaseTypeDetectionError: Если тип не определен или строка невалидна.
+
+    Note:
+        Эта функция является legacy wrapper для detect_and_validate_db_type().
+        Для нового кода рекомендуется использовать detect_and_validate_db_type().
     """
-    s = connection_string.lower()
-    # Проверка по префиксу схемы
-    if s.startswith(('oracle', 'oracle+cx_oracle', 'oracle+oracledb')):
-        return 'oracle'
-    if s.startswith(('postgresql', 'postgres', 'postgresql+psycopg', 'postgresql+psycopg3')):
-        return 'postgresql'
-    if s.startswith(('sqlite', 'sqlite3')) or s == ':memory:' or s.endswith(('.sqlite3', '.db')):
-        return 'sqlite'
+    db_type, is_valid, error = detect_and_validate_db_type(connection_string)
+    if not is_valid:
+        raise DatabaseTypeDetectionError(error)
+    return db_type  # type: ignore[return-value]
 
-    # Проверка по порту (fallback для строк без явной схемы)
-    if ':1521/' in s or ':1521@' in s:
-        return 'oracle'
-    if ':5432/' in s or ':5433/' in s or 'postgresql://' in s:
-        return 'postgresql'
 
-    raise DatabaseTypeDetectionError(f'Не удалось определить тип БД: {connection_string}')
+def validate_connection_string(connection_string: ConnectionString) -> tuple[bool, str]:
+    """
+    Валидирует connection string (legacy wrapper).
+
+    Args:
+        connection_string: Строка подключения для проверки.
+
+    Returns:
+        Кортеж (is_valid, error_message).
+
+    Note:
+        Эта функция является legacy wrapper для detect_and_validate_db_type().
+        Для нового кода рекомендуется использовать detect_and_validate_db_type().
+    """
+    _, is_valid, error = detect_and_validate_db_type(connection_string)
+    return (is_valid, error)
 
 
 @log_execution_time
@@ -168,34 +213,33 @@ def create_connection(
     timeout: int = 30,
 ) -> DatabaseConnection:
     """
-    Creates a database connection based on the provided connection string and database type.
-
-    This function establishes a connection to either Oracle or PostgreSQL databases.
-    If the database type is not explicitly provided, it will be automatically detected
-    from the connection string.
+    Создает подключение к БД на основе connection string.
 
     Args:
-        connection_string: A string containing the database connection information.
-        db_type: The type of database to connect to ('oracle', 'postgresql', or 'sqlite').
-                 If None, the type will be detected from the connection string.
-        read_only: When True, creates a read-only connection to the database.
-                   Default is False.
-        timeout: The number of seconds to wait for a connection before timing out.
-                 Default is 30 seconds.
+        connection_string: Строка подключения к БД.
+        db_type: Тип БД ('oracle', 'postgresql', 'sqlite').
+                 Если None, определяется автоматически.
+        read_only: Создать read-only подключение.
+        timeout: Таймаут подключения в секундах.
 
     Returns:
-        A database connection object that implements the DatabaseConnection protocol.
+        Объект подключения к БД.
 
     Raises:
-        ValueError: If the database type is not supported.
-        RuntimeError: If required database modules are not installed.
-        DatabaseTypeDetectionError: If the database type cannot be determined from the
-        connection string.
+        ValueError: Если тип БД не поддерживается или connection string невалиден.
+        DatabaseTypeDetectionError: Если не удалось определить тип БД.
     """
     logger = get_logger('database')
-    logger.debug('Creating connection to %s database', db_type or 'unknown')
 
-    db_type = db_type or detect_db_type(connection_string)
+    # Используем новую объединенную функцию
+    if db_type is None:
+        detected_type, is_valid, error = detect_and_validate_db_type(connection_string)
+        if not is_valid:
+            raise ValueError(f'Невалидный connection string: {error}')
+        db_type = detected_type  # type: ignore[assignment]
+
+    logger.debug('Creating connection to %s database', db_type)
+
     match db_type:
         case 'oracle':
             return _create_oracle_connection(
@@ -251,22 +295,20 @@ def _verify_oci_presence(lib_dir_str: str | None) -> None:
             raise FileNotFoundError(f'oci.dll not found in {lib_dir_str}')
 
 
-# Multi-platform setup
 def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> bool:
     """
-    Инициализирует Oracle thick client support (best-effort).
+    Инициализирует Oracle thick client support.
 
     Args:
         lib_dir: Путь к директории с Oracle instant client.
 
     Returns:
-        True при успешной инициализации, raises on fatal errors.
+        True при успешной инициализации.
 
     Raises:
         RuntimeError: При критических ошибках инициализации.
     """
     lib_dir_str = _normalize_lib_dir(lib_dir)
-
     if lib_dir_str is None and platform.system() == 'Windows':
         lib_dir_str = _autodetect_windows_instantclient()
 
@@ -280,6 +322,7 @@ def init_oracle_thick_mode(lib_dir: _Path | str | None = None) -> bool:
         )
     except Exception as e:
         raise RuntimeError(f'Failed to init Oracle thick mode: {e}') from e
+
     return True
 
 
@@ -290,16 +333,19 @@ def _create_oracle_connection(
     thick_mode: bool = True,
     lib_dir: _Path | str | None = None,
 ) -> DatabaseConnection:
+    """Создает подключение к Oracle БД."""
     parsed = urlparse(connection_string)
     host = parsed.hostname
     if not host:
         raise ValueError('Отсутствует hostname в строке подключения Oracle')
+
     port = parsed.port or 1521
     dsn = oracledb.makedsn(host, port, service_name=parsed.path.lstrip('/'))
+
     # Включаем thick mode если требуется
     if thick_mode:
-        # best-effort initialization; errors will propagate if critical
         _ = init_oracle_thick_mode(lib_dir=lib_dir)
+
     conn = oracledb.connect(
         user=parsed.username,
         password=parsed.password,
@@ -307,10 +353,12 @@ def _create_oracle_connection(
         config_dir=False,
         disable_oob=True,
     )
+
     if read_only:
         cursor = conn.cursor()
         cursor.execute('SET TRANSACTION READ ONLY')
         cursor.close()
+
     conn.autocommit = False
     return cast(DatabaseConnection, conn)
 
@@ -336,11 +384,11 @@ def _resolve_sqlite_path(conn_str: str) -> tuple[str, bool]:
     """Определяет путь к SQLite БД из connection string."""
     parsed = urlparse(conn_str)
     db_path_local = conn_str
+
     if parsed.scheme and parsed.scheme.startswith('sqlite'):
         db_path_local = parsed.path.lstrip('/') or parsed.netloc or db_path_local
 
     use_uri_local = db_path_local.startswith('file:') or '://' in conn_str
-
     if use_uri_local:
         return db_path_local, use_uri_local
 
@@ -360,6 +408,7 @@ def _resolve_sqlite_path(conn_str: str) -> tuple[str, bool]:
     parent = cand2.parent
     with suppress(Exception):
         parent.mkdir(parents=True, exist_ok=True)
+
     return str(cand2), use_uri_local
 
 
@@ -381,22 +430,12 @@ def _create_sqlite_connection(
     return cast(DatabaseConnection, conn)
 
 
-def close_connection(
-    connection: DatabaseConnection | None,
-) -> None:
+def close_connection(connection: DatabaseConnection | None) -> None:
     """
-    Safely closes a database connection if it exists.
-
-    This function checks if the provided connection object is not None
-    before attempting to close it, preventing errors when trying to close
-    a non-existent connection.
+    Безопасно закрывает подключение к БД.
 
     Args:
-        connection: The database connection to close. Can be None,
-                   in which case no action is taken.
-
-    Returns:
-        None: This function doesn't return a value.
+        connection: Объект подключения или None.
     """
     if connection is not None:
         connection.close()
@@ -428,8 +467,8 @@ def get_connection(
         ...     cursor.execute('SELECT 1')
     """
     logger = get_logger('database')
-
     connection = None
+
     try:
         connection = create_connection(
             connection_string,
@@ -453,112 +492,55 @@ def get_connection(
         logger.debug('Context manager: подключение закрыто')
 
 
-def oracle_info(
-    cursor,
-) -> dict[
-    str,
-    str | int,
-]:
-    """
-    Retrieves information about an Oracle database connection.
-
-    This function executes SQL queries against an Oracle database to gather
-    version and database name information.
-
-    Args:
-        cursor: An Oracle database cursor object that implements the DBCursor protocol.
-               Used to execute queries against the database.
-
-    Returns:
-        A dictionary containing information about the Oracle database:
-        - 'version': The Oracle database version string
-        - 'database': The name of the connected Oracle database
-    """
+def oracle_info(cursor) -> dict[str, str | int]:
+    """Получает информацию об Oracle БД."""
     info = {}
     cursor.execute("SELECT * FROM v$version WHERE banner LIKE 'Oracle%'")
     result = cursor.fetchone()
     if result:
         info['version'] = result[0]
+
     cursor.execute("SELECT SYS_CONTEXT('USERENV', 'DB_NAME') FROM DUAL")
     result = cursor.fetchone()
     if result:
         info['database'] = result[0]
+
     return info
 
 
-def postgres_info(
-    cursor,
-) -> dict[
-    str,
-    str | int,
-]:
-    """
-    Retrieves information about a PostgreSQL database connection.
-
-    This function executes SQL queries against a PostgreSQL database to gather
-    version and database name information.
-
-    Args:
-        cursor: A PostgreSQL database cursor object that implements the DBCursor protocol.
-               Used to execute queries against the database.
-
-    Returns:
-        A dictionary containing information about the PostgreSQL database:
-        - 'version': The PostgreSQL database version string
-        - 'database': The name of the connected PostgreSQL database
-    """
+def postgres_info(cursor) -> dict[str, str | int]:
+    """Получает информацию о PostgreSQL БД."""
     info = {}
     cursor.execute('SELECT version()')
     result = cursor.fetchone()
     if result:
         info['version'] = result[0]
+
     cursor.execute('SELECT current_database()')
     result = cursor.fetchone()
     if result:
         info['database'] = result[0]
+
     return info
 
 
-def sqlite_info(
-    cursor,
-) -> dict[
-    str,
-    str | int,
-]:
-    """
-    Retrieves information about a PostgreSQL database connection.
-
-    This function executes SQL queries against a PostgreSQL database to gather
-    version and database name information.
-
-    Args:
-        cursor: A PostgreSQL database cursor object that implements the DBCursor protocol.
-               Used to execute queries against the database.
-
-    Returns:
-        A dictionary containing information about the PostgreSQL database:
-        - 'version': The PostgreSQL database version string
-        - 'database': The name of the connected PostgreSQL database
-    """
+def sqlite_info(cursor) -> dict[str, str | int]:
+    """Получает информацию о SQLite БД."""
     info = {}
     cursor.execute('SELECT sqlite_version()')
     result = cursor.fetchone()
     if result:
         info['version'] = result[0]
+
     cursor.execute('SELECT name FROM pragma_database_list WHERE name="main"')
     result = cursor.fetchone()
     if result:
         info['database'] = result[0]
+
     return info
 
 
-def get_db_info(
-    connection: DatabaseConnection,
-    db_type: DBType,
-) -> dict[
-    str,
-    str | int,
-]:
+def get_db_info(connection: DatabaseConnection, db_type: DBType) -> dict[str, str | int]:
     """
     Получает информацию о БД.
 
@@ -591,123 +573,5 @@ def get_db_info(
         logger.warning('Не удалось получить информацию о БД: %s', e)
     finally:
         cursor.close()
+
     return info
-
-
-def check_non_empty_string(
-    connection_string: str,
-) -> tuple[
-    bool,
-    str,
-]:
-    """
-    Проверяет, что connection string не пустой и является строкой.
-
-    Args:
-        connection_string: Строка подключения для проверки.
-
-    Returns:
-        Кортеж (валидность, сообщение об ошибке).
-    """
-    if not connection_string or not isinstance(connection_string, str):
-        return False, 'Connection string должен быть непустой строкой'
-    return True, ''
-
-
-def check_url_parts(
-    parsed,
-) -> tuple[
-    bool,
-    str,
-]:
-    """
-    Проверяет корректность схемы и hostname в разобранном URL.
-
-    Args:
-        parsed: Результат разбора URL (urlparse).
-
-    Returns:
-        Кортеж (валидность, сообщение об ошибке).
-    """
-    # Для sqlite допустимы схемы 'sqlite' и отсутствие hostname (локальный файл)
-    if not parsed.scheme:
-        # Отсутствие схемы допускается для локальных файлов (например 'lice.sqlite3')
-        if not parsed.path:
-            return False, 'Отсутствует путь к файлу для sqlite или схема подключения'
-        return True, ''
-
-    scheme = parsed.scheme.lower()
-    if scheme.startswith('sqlite'):
-        # sqlite://... может не иметь hostname, проверяем наличие пути/нетлока
-        if parsed.path or parsed.netloc:
-            return True, ''
-        return False, 'Отсутствует путь к sqlite базе'
-
-    # для остальных схем требуется hostname
-    if not parsed.hostname:
-        return False, 'Отсутствует hostname'
-    return True, ''
-
-
-def try_parse_url(connection_string: str) -> tuple[bool, object | str]:
-    """
-    Попытка разбора URL из connection string.
-
-    Returns:
-        (True, parsed_url) если успешно,
-        (False, сообщение об ошибке) иначе.
-    """
-    try:
-        return True, urlparse(connection_string)
-    except Exception as e:
-        return False, f'Ошибка при валидации: {e}'
-
-
-def try_detect_db_type(connection_string: str) -> tuple[bool, str]:
-    """
-    Попытка определения типа БД из connection string.
-
-    Returns:
-        (True, db_type) если успешно,
-        (False, сообщение об ошибке) иначе.
-    """
-    try:
-        db_type = detect_db_type(connection_string)
-    except ValueError as e:
-        return False, str(e)
-    else:
-        return True, db_type
-
-
-def validate_connection_string(
-    connection_string: ConnectionString,
-) -> tuple[bool, str]:
-    """
-    Валидирует connection string.
-
-    Args:
-        connection_string: Строка подключения для проверки.
-
-    Returns:
-        Кортеж (валидность, сообщение об ошибке).
-    """
-    logger = get_logger('database')
-
-    is_valid, error = check_non_empty_string(connection_string)
-    if not is_valid:
-        return is_valid, error
-
-    is_valid, parsed_or_err = try_parse_url(connection_string)
-    if not is_valid:
-        return False, str(parsed_or_err)
-
-    is_valid, error = check_url_parts(parsed_or_err)
-    if not is_valid:
-        return is_valid, error
-
-    is_valid, db_type_or_err = try_detect_db_type(connection_string)
-    if not is_valid:
-        return False, str(db_type_or_err)
-
-    logger.debug('Connection string валиден для %s', db_type_or_err)
-    return True, ''

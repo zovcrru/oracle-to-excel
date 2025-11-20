@@ -30,6 +30,7 @@ class ConfigDict(TypedDict):
 
     DB_TYPE: str
     DB_CONNECT_URI: str
+    LIB_DIR: NotRequired[str]
     LOG_LEVEL: NotRequired[str]
     OUTPUT_DIR: NotRequired[str]
     FETCH_ARRAY_SIZE: NotRequired[int]
@@ -39,7 +40,17 @@ class ConfigDict(TypedDict):
     COLUMN_WIDTH_SAMPLE_SIZE: NotRequired[int]
 
 
-REQUIRED_CONFIG: frozenset[str] = frozenset({'DB_TYPE', 'DB_CONNECT_URI'})
+# REQUIRED_CONFIG: frozenset[str] = frozenset({'DB_TYPE', 'DB_CONNECT_URI'})
+
+# Базовые обязательные поля
+BASE_REQUIRED: frozenset[str] = frozenset({'DB_TYPE', 'DB_CONNECT_URI'})
+
+# Условные обязательные поля для каждого типа БД
+BASE_CONDITIONAL_REQUIRED: dict[str, frozenset[str]] = {
+    'oracle': frozenset({'LIB_DIR'}),
+    'sqlite3': frozenset(),
+    'postgresql': frozenset(),
+}
 
 DEFAULT_CONFIG: Mapping[str, int | str] = {
     'LOG_LEVEL': 'INFO',
@@ -105,12 +116,33 @@ def load_config(
 
     config = _load_required_params(logger)
     _load_optional_params(config, logger)
+    print(config)
     _mask_sensitive_data(config, logger)
+    validate_config(config)
 
     if logger:
         logger.info('Конфигурация успешно загружена (%d параметров)', len(config))
 
     return cast(ConfigDict, config)
+
+
+def validate_config(config: ConfigDict) -> None:
+    """Валидирует конфигурацию с учётом условных требований."""
+    # Проверка базовых полей
+    missing_base = BASE_REQUIRED - config.keys()
+    if missing_base:
+        raise ValueError(f'Missing required fields: {missing_base}')
+
+    # Проверка условных полей
+    db_type = config.get('DB_TYPE', '')
+    required_for_type = BASE_CONDITIONAL_REQUIRED.get('oracle', frozenset())
+    print(db_type)
+    print(required_for_type)
+    missing_conditional = required_for_type - config.keys()
+    print(config.keys(), missing_conditional)
+
+    if missing_conditional:
+        raise ValueError(f'Missing required fields for {db_type}: {missing_conditional}')
 
 
 def _load_required_params(
@@ -120,7 +152,7 @@ def _load_required_params(
     config: dict[str, str | int | bool] = {}
     missing_params = []
 
-    for param in REQUIRED_CONFIG:
+    for param in BASE_REQUIRED:
         value = os.getenv(param)
         if value:
             config[param] = value
@@ -299,7 +331,7 @@ def _validate_required_params(
     logger: logging.Logger | None,
 ) -> None:
     """Проверяет наличие обязательных параметров."""
-    for param in REQUIRED_CONFIG:
+    for param in BASE_REQUIRED:
         if param not in config or not config.get(param):
             error = f'Отсутствует обязательный параметр: {param}'
             errors.append(error)
@@ -476,6 +508,34 @@ def _validate_output_dir(
     if not output_dir.is_dir():
         errors.append(f'OUTPUT_DIR не является директорией: {output_dir}')
     _check_directory_permissions(output_dir, errors, logger)
+
+
+def validate_config1(
+    config: ConfigDict,
+    logger: logging.Logger | None = None,
+) -> tuple[bool, list[str]]:
+    """Валидирует параметры конфигурации."""
+    errors: list[str] = []
+
+    if logger:
+        logger.debug('Начало валидации конфигурации')
+
+    _validate_required_params(config, errors, logger)
+    # _validate_db_type(config, logger)
+    _validate_connection_string(config, errors, logger)
+    _validate_log_level(config, errors, logger)
+    _validate_numeric_params(config, errors, logger)
+    _validate_output_dir(config, errors, logger)
+
+    is_valid = len(errors) == 0
+
+    if logger:
+        if is_valid:
+            logger.info('✓ Конфигурация валидна')
+        else:
+            logger.error('✗ Валидация провалена: %d ошибок', len(errors))
+
+    return (is_valid, errors)
 
 
 def _check_directory_permissions(
