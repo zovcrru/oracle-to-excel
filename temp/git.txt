@@ -1,0 +1,5 @@
+git checkout -b fix/sqlite-connection-tests
+git add src/oracle_to_excel/database.py tests/test_database.py
+git commit -m "Fix: sqlite connection handling; add tests for sqlite and validate_connection_string"
+git push -u origin fix/sqlite-connection-tests
+gh pr create --fill --title "Fix: sqlite connection handling and tests" --body "Fixes sqlite URI handling in database.py and adds tests in tests/test_database.py."

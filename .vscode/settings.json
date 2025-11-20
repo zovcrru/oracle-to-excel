@@ -66,4 +66,11 @@
   "terminal.integrated.shellIntegration.decorationsEnabled": "never",
   "terminal.integrated.shellIntegration.enabled": true,
   "chat.editor.fontSize": 16,
+  "ruff.interpreter": [
+    "C:\\Work\\2025\\oracle-to-excel\\.venv\\Scripts\\python.exe"
+  ],
+  "isort.importStrategy": "fromEnvironment",
+  "ruff.path": [
+    "C:\\Work\\2025\\oracle-to-excel\\.venv\\Scripts\\ruff.exe"
+  ],
 }

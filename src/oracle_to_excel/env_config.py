@@ -1,21 +1,21 @@
-"""
-Модуль загрузки конфигурации из .env файла с использованием Pydantic.
-"""
+"""Модуль загрузки конфигурации из .env файла с использованием Pydantic."""
+# ruff: noqa
 
 from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Final, Mapping
+from typing import Final, cast
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_core import PydanticUseDefault
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Импортируем logger, если доступен
+# Импортируем setup_logging, если доступен
 try:
-    from .logger import get_logger, setup_logging
+    from .logger import setup_logging
 
     LOGGER_AVAILABLE = True
 except ImportError:
@@ -65,7 +65,7 @@ SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _get_masked_value(value: Any) -> str:
+def _get_masked_value(value: object) -> str:
     """
     Получает замаскированное значение.
 
@@ -108,75 +108,83 @@ class Settings(BaseSettings):
 
     # Database Settings (опциональные с дефолтами)
     fetch_array_size: int = Field(
-        default=DEFAULT_CONFIG['FETCH_ARRAY_SIZE'],
+        default=cast(int, DEFAULT_CONFIG['FETCH_ARRAY_SIZE']),
         alias='FETCH_ARRAY_SIZE',
         description='Размер массива для fetch',
     )
     chunk_size: int = Field(
-        default=DEFAULT_CONFIG['CHUNK_SIZE'], alias='CHUNK_SIZE', description='Размер чанка данных'
+        default=cast(int, DEFAULT_CONFIG['CHUNK_SIZE']),
+        alias='CHUNK_SIZE',
+        description='Размер чанка данных',
     )
     query_timeout: int | None = Field(
-        default=DEFAULT_CONFIG.get('QUERY_TIMEOUT'),
+        default=cast(int | None, DEFAULT_CONFIG.get('QUERY_TIMEOUT')),
         alias='QUERY_TIMEOUT',
         description='Таймаут запроса в секундах',
     )
 
     # Application Settings
     log_level: str = Field(
-        default=DEFAULT_CONFIG['LOG_LEVEL'], alias='LOG_LEVEL', description='Уровень логирования'
+        default=cast(str, DEFAULT_CONFIG['LOG_LEVEL']),
+        alias='LOG_LEVEL',
+        description='Уровень логирования',
     )
     log_file: Path = Field(
-        default=Path(DEFAULT_CONFIG['LOG_FILE']), alias='LOG_FILE', description='Путь к файлу логов'
+        default=Path(cast(str, DEFAULT_CONFIG['LOG_FILE'])),
+        alias='LOG_FILE',
+        description='Путь к файлу логов',
     )
     output_dir: Path = Field(
-        default=Path(DEFAULT_CONFIG['OUTPUT_DIR']),
+        default=Path(cast(str, DEFAULT_CONFIG['OUTPUT_DIR'])),
         alias='OUTPUT_DIR',
         description='Директория для экспорта',
     )
 
     # Excel Settings
     max_column_width: int = Field(
-        default=DEFAULT_CONFIG['MAX_COLUMN_WIDTH'],
+        default=cast(int, DEFAULT_CONFIG['MAX_COLUMN_WIDTH']),
         alias='MAX_COLUMN_WIDTH',
         description='Максимальная ширина колонки в Excel',
     )
     column_width_sample_size: int = Field(
-        default=DEFAULT_CONFIG['COLUMN_WIDTH_SAMPLE_SIZE'],
+        default=cast(int, DEFAULT_CONFIG['COLUMN_WIDTH_SAMPLE_SIZE']),
         alias='COLUMN_WIDTH_SAMPLE_SIZE',
         description='Размер выборки для вычисления ширины колонки',
     )
     null_value_replacement: str = Field(
-        default=DEFAULT_CONFIG['NULL_VALUE_REPLACEMENT'],
+        default=cast(str, DEFAULT_CONFIG['NULL_VALUE_REPLACEMENT']),
         alias='NULL_VALUE_REPLACEMENT',
         description='Замена для NULL значений',
     )
     wrap_long_text: bool = Field(
-        default=DEFAULT_CONFIG['WRAP_LONG_TEXT'],
+        default=cast(bool, DEFAULT_CONFIG['WRAP_LONG_TEXT']),
         alias='WRAP_LONG_TEXT',
         description='Перенос длинного текста',
     )
     max_rows_per_sheet: int = Field(
-        default=DEFAULT_CONFIG['MAX_ROWS_PER_SHEET'],
+        default=cast(int, DEFAULT_CONFIG['MAX_ROWS_PER_SHEET']),
         alias='MAX_ROWS_PER_SHEET',
         description='Максимальное количество строк на лист',
     )
 
     # Performance Settings
     enable_batch_processing: bool = Field(
-        default=DEFAULT_CONFIG['ENABLE_BATCH_PROCESSING'],
+        default=cast(bool, DEFAULT_CONFIG['ENABLE_BATCH_PROCESSING']),
         alias='ENABLE_BATCH_PROCESSING',
         description='Включить пакетную обработку',
     )
     batch_size: int = Field(
-        default=DEFAULT_CONFIG['BATCH_SIZE'], alias='BATCH_SIZE', description='Размер пакета'
+        default=cast(int, DEFAULT_CONFIG['BATCH_SIZE']),
+        alias='BATCH_SIZE',
+        description='Размер пакета',
     )
     show_progress_bar: bool = Field(
-        default=DEFAULT_CONFIG['SHOW_PROGRESS_BAR'],
+        default=cast(bool, DEFAULT_CONFIG['SHOW_PROGRESS_BAR']),
         alias='SHOW_PROGRESS_BAR',
-        description='Показывать прогресс-бар',
+        description='Show progress bar',
     )
     progress_update_interval: int = Field(
-        default=DEFAULT_CONFIG['PROGRESS_UPDATE_INTERVAL'],
+        default=cast(int, DEFAULT_CONFIG['PROGRESS_UPDATE_INTERVAL']),
         alias='PROGRESS_UPDATE_INTERVAL',
         description='Интервал обновления прогресса',
     )
@@ -193,7 +201,7 @@ class Settings(BaseSettings):
 
     @field_validator('query_timeout', mode='before')
     @classmethod
-    def empty_str_to_none_optional(cls, v: Any) -> Any:
+    def empty_str_to_none_optional(cls, v: object) -> object:
         """Конвертирует пустую строку в None для Optional полей."""
         if v == '':
             return None
@@ -213,10 +221,10 @@ class Settings(BaseSettings):
         mode='before',
     )
     @classmethod
-    def empty_str_use_default(cls, v: Any) -> Any:
+    def empty_str_use_default(cls, v: object) -> object:
         """Использует default значение для пустых строк."""
         if v == '':
-            raise PydanticUseDefault()
+            raise PydanticUseDefault
         return v
 
     @field_validator('log_level')
@@ -241,7 +249,7 @@ class Settings(BaseSettings):
         *,
         mode: str = 'python',
         by_alias: bool = True,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """
         Возвращает словарь с замаскированными чувствительными данными.
 
@@ -256,7 +264,7 @@ class Settings(BaseSettings):
         data = self.model_dump(mode=mode, by_alias=by_alias)
 
         masked_count = 0
-        masked_data = {}
+        masked_data: dict[str, object] = {}
 
         for key, value in data.items():
             # Проверяем, содержит ли ключ чувствительные слова
@@ -299,54 +307,57 @@ def get_settings() -> Settings:
     Raises:
         ValidationError: Если .env файл содержит некорректные данные
     """
-    # Настраиваем базовое логирование для ошибок загрузки конфигурации
+    logger = _create_bootstrap_logger()
+
+    try:
+        settings = Settings()  # type: ignore[call-arg]
+    except ValidationError as e:
+        logger.exception('❌ Ошибка валидации конфигурации из .env файла')
+        logger.exception('Детали ошибок валидации:')
+        for error in e.errors():
+            field = ' -> '.join(str(loc) for loc in error['loc'])
+            msg = f'  Поле: {field} | Тип: {error["type"]} | Сообщение: {error["msg"]}'
+            logger.exception(msg)
+        raise
+    except Exception:
+        logger.exception('❌ Неожиданная ошибка при загрузке конфигурации')
+        raise
+
+    logger.info('✅ Конфигурация успешно загружена из .env')
+    _log_masked_config(settings, logger)
+
+    return settings
+
+
+def _log_masked_config(settings: Settings, logger: logging.Logger) -> None:
+    """Log masked settings for debug purposes."""
+    masked_config = settings.model_dump_masked()
+    logger.debug('Загруженная конфигурация:')
+    for key, value in masked_config.items():
+        if not key.startswith('_original_'):
+            logger.debug('  %s: %s', key, value)
+
+
+def _create_bootstrap_logger() -> logging.Logger:
+    """Create a minimal logger used during bootstrap/config loading."""
     if LOGGER_AVAILABLE:
-        # Используем минимальный уровень для bootstrap логирования
-        logger = setup_logging(
+        return setup_logging(
             log_level='INFO',
-            log_file=Path(DEFAULT_CONFIG['LOG_FILE']),
+            log_file=Path(cast(str, DEFAULT_CONFIG['LOG_FILE'])),
             logger_name='oracle_exporter.config',
             console_output=True,
             mask_sensitive=True,
         )
-    else:
-        # Fallback на стандартное логирование
-        import logging
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(DEFAULT_CONFIG['LOG_FILE'], encoding='utf-8'),
-            ],
-        )
-        logger = logging.getLogger('oracle_exporter.config')
-
-    try:
-        settings = Settings()
-        logger.info('✅ Конфигурация успешно загружена из .env')
-
-        # Логируем замаскированную конфигурацию
-        masked_config = settings.model_dump_masked()
-        logger.debug('Загруженная конфигурация:')
-        for key, value in masked_config.items():
-            if not key.startswith('_original_'):
-                logger.debug('  %s: %s', key, value)
-
-        return settings
-
-    except ValidationError as e:
-        logger.error('❌ Ошибка валидации конфигурации из .env файла', exc_info=True)
-        logger.error('Детали ошибок валидации:')
-        for error in e.errors():
-            field = ' -> '.join(str(loc) for loc in error['loc'])
-            logger.error('  Поле: %s | Тип: %s | Сообщение: %s', field, error['type'], error['msg'])
-        raise
-
-    except Exception as e:
-        logger.error('❌ Неожиданная ошибка при загрузке конфигурации', exc_info=True)
-        raise
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(cast(str, DEFAULT_CONFIG['LOG_FILE']), encoding='utf-8'),
+        ],
+    )
+    return logging.getLogger('oracle_exporter.config')
 
 
 def print_config_summary(
@@ -418,7 +429,7 @@ def _log_config_header(logger: logging.Logger) -> None:
 def _log_config_section(
     section_name: str,
     params: list[str],
-    config_data: dict[str, Any],
+    config_data: dict[str, object],
     *,
     logger: logging.Logger,
 ) -> None:
@@ -429,10 +440,7 @@ def _log_config_section(
 
     for param in params:
         value = config_data.get(param)
-        if value is None:
-            display_value = 'не задано'
-        else:
-            display_value = value
+        display_value = 'не задано' if value is None else value
         logger.info('  %-28s %s', param, display_value)
 
 
@@ -444,7 +452,7 @@ def _log_config_footer(logger: logging.Logger) -> None:
 
 def _print_config_to_console(
     sections: list[tuple[str, list[str]]],
-    config_data: dict[str, Any],
+    config_data: dict[str, object],
 ) -> None:
     """Выводит конфигурацию в консоль через print."""
     print()
@@ -459,10 +467,7 @@ def _print_config_to_console(
 
         for param in params:
             value = config_data.get(param)
-            if value is None:
-                display_value = 'не задано'
-            else:
-                display_value = value
+            display_value = 'не задано' if value is None else value
             print(f'  {param:<28} {display_value}')
 
     print()
@@ -484,10 +489,7 @@ if __name__ == '__main__':
     try:
         config = get_settings()
 
-        # Вывод через print (для консоли)
-        # print_config_summary(config, mask_sensitive=True)
-
-        # Или вывод через logger (для логов)
+        # Вывод через logger (для логов)
         logger.info('\nВывод через logger:')
         print_config_summary(config, mask_sensitive=True, logger=logger)
 

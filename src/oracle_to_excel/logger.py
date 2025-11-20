@@ -5,9 +5,6 @@ Configures centralized logging with support for
 file rotation and sensitive data filtering.
 """
 
-# PEP 649: Deferred annotation evaluation
-from __future__ import annotations
-
 import logging
 import logging.handlers
 import re
@@ -250,7 +247,12 @@ def _create_colored_formatter() -> logging.Formatter:
             levelname = record.levelname
             if levelname in colors:
                 colored = f'{colors[levelname]}{levelname}{colors["RESET"]}'
-                record.levelname = colored
+                original = record.levelname
+                try:
+                    record.levelname = colored
+                    return super().format(record)
+                finally:
+                    record.levelname = original
             return super().format(record)
 
     return ColoredFormatter(
@@ -259,35 +261,31 @@ def _create_colored_formatter() -> logging.Formatter:
     )
 
 
-def _create_sensitive_filter() -> FilterFunc:
-    """
-    Create filter for masking sensitive data in logs.
+def _create_sensitive_filter() -> logging.Filter:
+    """Create a logging.Filter instance that masks sensitive data.
 
     Returns:
-        Filter function for logs.
+        Instance of logging.Filter implementing .filter(record).
     """
     compiled_patterns = [
         (re.compile(pattern, re.IGNORECASE), replacement)
         for pattern, replacement in SENSITIVE_PATTERNS
     ]
 
-    def filter_sensitive(record: logging.LogRecord) -> bool:
-        """Mask sensitive data in log message."""
-        original_msg = record.getMessage()
+    class SensitiveDataFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            original_msg = record.getMessage()
+            filtered_msg = original_msg
+            for pattern, replacement in compiled_patterns:
+                filtered_msg = pattern.sub(replacement, filtered_msg)
 
-        # Apply all masking patterns
-        filtered_msg = original_msg
-        for pattern, replacement in compiled_patterns:
-            filtered_msg = pattern.sub(replacement, filtered_msg)
+            if filtered_msg != original_msg:
+                record.msg = filtered_msg
+                record.args = ()
 
-        # Update message if anything changed
-        if filtered_msg != original_msg:
-            record.msg = filtered_msg
-            record.args = ()
+            return True
 
-        return True  # Always allow record
-
-    return filter_sensitive
+    return SensitiveDataFilter()
 
 
 def log_execution_time[**P, R](
