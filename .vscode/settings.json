@@ -73,4 +73,6 @@
   "ruff.path": [
     "C:\\Work\\2025\\oracle-to-excel\\.venv\\Scripts\\ruff.exe"
   ],
+  "telemetry.editStats.enabled": false,
+  "telemetry.feedback.enabled": false,
 }

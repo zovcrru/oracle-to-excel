@@ -5,17 +5,22 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from oracle_to_excel.config import ConfigDict, _validate_db_type, load_config, print_config_summary
+from oracle_to_excel.env_config import (
+    DEFAULT_CONFIG,
+    Settings,
+    load_config,
+    print_config_summary,
+)
 from oracle_to_excel.database import (
     DBType,
     get_connection,
     get_db_info,
-    validate_connection_string,
 )
 from oracle_to_excel.logger import setup_logging
 
 
-def _load_config() -> ConfigDict | None:
+def _load_config() -> Settings | None:
+    """Загружает конфигурацию из .env файла."""
     try:
         return load_config()
     except (FileNotFoundError, ValueError):
@@ -24,90 +29,79 @@ def _load_config() -> ConfigDict | None:
         return None
 
 
-def _setup_logger_from_config(config: ConfigDict) -> logging.Logger:
-    log_level_raw = config.get('LOG_LEVEL')
-    log_file_raw = config.get('LOG_FILE')
-
-    log_level = log_level_raw if isinstance(log_level_raw, str) else 'INFO'
-    log_file_path = (
-        Path(log_file_raw) if isinstance(log_file_raw, str) else Path('.logs/oracle_export.log')
-    )
+def _setup_logger_from_config(config: Settings) -> logging.Logger:
+    """Настраивает логгер на основе конфигурации."""
+    log_level = config.log_level
+    log_file_path = Path(config.log_file)
 
     return setup_logging(log_level=log_level, log_file=log_file_path)
 
+def _setup_logger_from_default(path: Path) -> logging.Logger:
+    """Настраивает логгер с дефолтными настройками."""
 
-def _ensure_connection_string(config: ConfigDict, logger: logging.Logger) -> str | None:
-    """Validate DB connection string and return original connection URI or None on error."""
-    connection_string = config.get('DB_CONNECT_URI')
-    if not connection_string or not isinstance(connection_string, str):
-        logger.error('Отсутствует или некорректен параметр DB_CONNECT_URI')
-        return None
-
-    is_valid, error_message = validate_connection_string(connection_string)
-    if not is_valid:
-        logger.error('Невалидный connection string: %s', error_message)
-        return None
-
-    logger.info('Connection string %s прошел валидацию', connection_string)
-
-    original = cast(str | None, config.get('_original_DB_CONNECT_URI'))
-    if original is None:
-        logger.error('Оригинальный DB_CONNECT_URI отсутствует в конфигурации')
-        return None
-
-    return original
+    return setup_logging(log_level=logging.ERROR, log_file=path)
 
 
-def _connect_and_log(conn_str: str, db_t: DBType | None, logger: logging.Logger) -> bool:
-    try:
-        with get_connection(
-            connection_string=conn_str,
-            db_type=db_t,
-            read_only=True,
-            timeout=30,
-        ) as connection:
-            logger.info('Подключение к БД установлено')
-            final_db_type = cast(DBType, db_t or 'oracle')
-            db_info = get_db_info(connection, final_db_type)
-            logger.info('Информация о БД: %s', db_info)
-            return True
-    except Exception:
-        logger.exception('Ошибка при подключении к БД')
-        return False
 
+def main() -> None:
+    """Основная точка входа приложения."""
+    # Создаем логгер с дефолтным лог-файлом сразу
+    default_logfile = Path(DEFAULT_CONFIG['LOG_FILE'])
+    logger = _setup_logger_from_default(default_logfile)
 
-def main() -> int:
-    """
-    Основная точка входа приложения.
-
-    Загружает конфигурацию, настраивает логирование и выводит сводку.
-
-    Returns:
-        Код выхода (0 для успеха, 1 для ошибки).
-    """
+    # 1. Загружаем конфигурацию
     config = _load_config()
     if config is None:
-        return 1
+        logger.error('Не удалось загрузить конфигурацию. Завершение.',)
+        sys.exit(1)
 
-    logger = _setup_logger_from_config(config)
-    logger.info('Конфигурация загружена.')
+    # 2. Пересоздаем логгер с параметрами из конфига (если путь к логу или log_level отличаются)
+    logfile_path = Path(config.log_file)
+    if logfile_path != default_logfile or logging.getLevelName(logger.getEffectiveLevel()) != config.log_level:
+        logger = _setup_logger_from_config(config)
+        logger.info("Логгер перенастроен по конфигу")
+    logger.info('Запуск приложения oracle_to_excel')
+
+    # 3. Выводим сводку конфигурации (теперь с logger!)
     print_config_summary(config, logger=logger)
 
-    db_type_raw = config.get('DB_TYPE')
-    db_type = cast(DBType | None, db_type_raw) if isinstance(db_type_raw, str) else None
-    if _validate_db_type(db_type, logger=logger) > 0:
-        return 1
+    # 4. Нормализуем db_type к DBType
+    db_type = cast(DBType, config.db_type)
 
-    connection_string = _ensure_connection_string(config, logger)
-    if connection_string is None:
-        return 1
+    # 5. Валидируем connection string
+    if config._original_db_connect_uri:
+        connection_string = config._original_db_connect_uri
+    else:
+        connection_string = config.db_connect_uri
 
-    if not _connect_and_log(connection_string, db_type, logger):
-        return 1
+    # is_valid, error_msg = validate_connection_string(connection_string)
+    # if not is_valid:
+    #     logger.error(f'Некорректный connection string: {error_msg}')
+    #     sys.exit(1)
 
-    logger.info('Работа завершена успешно')
-    return 0
+    # 6. Получаем информацию о БД
+    logger.info(f'Подключение к {db_type} БД...')
+    try:
+        # Передаём lib_dir только для Oracle
+        # Для PostgreSQL и SQLite config.lib_dir будет None (игнорируется)
+        with get_connection(
+            connection_string,
+            db_type,
+            lib_dir=config.lib_dir if db_type == 'oracle' else None
+        ) as conn:
+            db_info = get_db_info(conn, db_type)
+            logger.info(f'Подключение успешно: {db_info}')
+            print(f'\n✓ Подключение к {db_type} успешно установлено')
+            print(f'  База данных: {db_info.get("database", "N/A")}')
+            print(f'  Версия: {db_info.get("version", "N/A")}')
+            print(f'  Пользователь: {db_info.get("user", "N/A")}')
+
+    except Exception:
+        logger.exception('Ошибка при подключении к БД')
+        sys.exit(1)
+
+    logger.info('Приложение завершено успешно')
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    main()

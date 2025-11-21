@@ -166,6 +166,7 @@ def create_connection(
     *,
     read_only: bool = False,
     timeout: int = 30,
+    lib_dir: str | None = None,
 ) -> DatabaseConnection:
     """
     Creates a database connection based on the provided connection string and database type.
@@ -198,11 +199,12 @@ def create_connection(
     db_type = db_type or detect_db_type(connection_string)
     match db_type:
         case 'oracle':
+            oracle_lib_dir = lib_dir or r'd:\instantclient_12_1'
             return _create_oracle_connection(
                 connection_string,
                 read_only=read_only,
                 thick_mode=True,
-                lib_dir=r'd:\instantclient_12_1',
+                lib_dir=oracle_lib_dir,  # ← ИСПОЛЬЗОВАТЬ
             )
         case 'postgresql' | 'postgres':
             return _create_postgresql_connection(
@@ -409,6 +411,7 @@ def get_connection(
     *,
     read_only: bool = False,
     timeout: int = 30,
+    lib_dir: str | None = None,
 ) -> Generator[DatabaseConnection]:
     """
     Context manager для работы с подключением к БД.
@@ -436,6 +439,7 @@ def get_connection(
             db_type,
             read_only=read_only,
             timeout=timeout,
+            lib_dir=lib_dir,
         )
         logger.debug('Context manager: подключение создано')
         yield connection
@@ -483,6 +487,10 @@ def oracle_info(
     result = cursor.fetchone()
     if result:
         info['database'] = result[0]
+    cursor.execute("SELECT USER FROM dual")
+    result = cursor.fetchone()
+    if result:
+        info['user'] = result[0]
     return info
 
 
@@ -516,6 +524,10 @@ def postgres_info(
     result = cursor.fetchone()
     if result:
         info['database'] = result[0]
+    cursor.execute('SELECT CURRENT_USER')
+    if result:
+        info['user'] = result[0]
+
     return info
 
 
@@ -571,7 +583,6 @@ def get_db_info(
     """
     logger = get_logger('database')
     info: dict[str, str | int] = {'db_type': db_type}
-
     info_funcs = {
         'oracle': oracle_info,
         'postgresql': postgres_info,
@@ -583,6 +594,7 @@ def get_db_info(
     cursor = connection.cursor()
     try:
         if db_type in info_funcs:
+            print("db_type=", db_type)
             info.update(info_funcs[db_type](cursor))
         else:
             logger.warning('Unsupported database type: %s', db_type)
@@ -679,35 +691,35 @@ def try_detect_db_type(connection_string: str) -> tuple[bool, str]:
         return True, db_type
 
 
-def validate_connection_string(
-    connection_string: ConnectionString,
-) -> tuple[bool, str]:
-    """
-    Валидирует connection string.
+# def validate_connection_string(
+#     connection_string: ConnectionString,
+# ) -> tuple[bool, str]:
+#     """
+#     Валидирует connection string.
 
-    Args:
-        connection_string: Строка подключения для проверки.
+#     Args:
+#         connection_string: Строка подключения для проверки.
 
-    Returns:
-        Кортеж (валидность, сообщение об ошибке).
-    """
-    logger = get_logger('database')
+#     Returns:
+#         Кортеж (валидность, сообщение об ошибке).
+#     """
+#     logger = get_logger('database')
 
-    is_valid, error = check_non_empty_string(connection_string)
-    if not is_valid:
-        return is_valid, error
+#     is_valid, error = check_non_empty_string(connection_string)
+#     if not is_valid:
+#         return is_valid, error
 
-    is_valid, parsed_or_err = try_parse_url(connection_string)
-    if not is_valid:
-        return False, str(parsed_or_err)
+#     is_valid, parsed_or_err = try_parse_url(connection_string)
+#     if not is_valid:
+#         return False, str(parsed_or_err)
 
-    is_valid, error = check_url_parts(parsed_or_err)
-    if not is_valid:
-        return is_valid, error
+#     is_valid, error = check_url_parts(parsed_or_err)
+#     if not is_valid:
+#         return is_valid, error
 
-    is_valid, db_type_or_err = try_detect_db_type(connection_string)
-    if not is_valid:
-        return False, str(db_type_or_err)
+#     is_valid, db_type_or_err = try_detect_db_type(connection_string)
+#     if not is_valid:
+#         return False, str(db_type_or_err)
 
-    logger.debug('Connection string валиден для %s', db_type_or_err)
-    return True, ''
+#     logger.debug('Connection string валиден для %s', db_type_or_err)
+#     return True, ''
