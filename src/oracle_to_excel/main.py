@@ -36,11 +36,10 @@ def _setup_logger_from_config(config: Settings) -> logging.Logger:
 
     return setup_logging(log_level=log_level, log_file=log_file_path)
 
+
 def _setup_logger_from_default(path: Path) -> logging.Logger:
     """Настраивает логгер с дефолтными настройками."""
-
     return setup_logging(log_level=logging.ERROR, log_file=path)
-
 
 
 def main() -> None:

@@ -264,9 +264,6 @@ class Settings(BaseSettings):
 
         return uri
 
-
-
-
     @model_validator(mode='after')
     def validate_oracle_lib_dir(self) -> Settings:
         """Проверяет наличие lib_dir для Oracle."""
@@ -300,7 +297,6 @@ class Settings(BaseSettings):
             return uri
         except Exception:
             return uri
-
 
 
 def load_config(env_file: str = '.env') -> Settings:
@@ -469,9 +465,9 @@ def main() -> None:
     try:
         config = load_config()
         print_config_summary(config)
-        print(f"\n✓ Конфигурация успешно загружена из .env")
-        print(f"✓ DB_TYPE: {config.db_type}")
-        print(f"✓ Оригинальный URI доступен через: config._original_db_connect_uri")
+        print("\n✓ Конфигурация успешно загружена из .env")
+        print("✓ DB_TYPE: {config.db_type}")
+        print("✓ Оригинальный URI доступен через: config._original_db_connect_uri")
 
     except (FileNotFoundError, ValueError) as e:
         print(f"\n✗ Ошибка: {e}", file=sys.stderr)
