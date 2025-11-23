@@ -1,0 +1,1092 @@
+==================================================================================== test session starts =====================================================================================
+platform win32 -- Python 3.14.0, pytest-9.0.1, pluggy-1.6.0 -- C:\Work\2025\oracle-to-excel\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Work\2025\oracle-to-excel
+configfile: pyproject.toml (WARNING: ignoring pytest config in setup.cfg!)
+plugins: cov-7.0.0
+collecting ... collected 36 items / 6 deselected / 30 selected
+
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[oracle://scott:tiger@localhost:1521/ORCL-oracle://scott:***@localhost:1521/ORCL] FAILED [  3%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql://admin:SecretPass@db.local:5432/mydb-postgresql://admin:***@db.local:5432/mydb] FAILED [  6%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql://user:P@ssw0rd@host:5432/db-postgresql://user:***@host:5432/db] FAILED [ 10%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[oracle+cx_oracle://user:password@localhost:1521/xe-oracle+cx_oracle://user:***@localhost:1521/xe] FAILED [ 13%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql+psycopg2://user:pass123@db:5432/mydb-postgresql+psycopg2://user:***@db:5432/mydb] FAILED [ 16%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[oracle://user@localhost:1521/ORCL-oracle://user@localhost:1521/ORCL] PASSED [ 20%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[sqlite:///path/to/database.db-sqlite:///path/to/database.db] PASSED [ 23%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[MYDB_TNS-MYDB_TNS] PASSED [ 26%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[-] PASSED [ 30%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[simple] FAILED [ 33%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[P@ssw0rd!] FAILED [ 36%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[pass_word] FAILED [ 40%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[123456] FAILED [ 43%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[pass-word-123] FAILED [ 46%]
+tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[alongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpassword] FAILED [ 50%]
+tests/test_env_config.py::TestModelDumpMasked::test_model_dump_masked_sqlite_no_password PASSED [ 53%]
+tests/test_env_config.py::TestLoggingPasswordProtection::test_print_config_summary_masks_password_in_logs FAILED [ 56%]
+tests/test_env_config.py::TestLoggingPasswordProtection::test_print_config_summary_console_masks_password FAILED [ 60%]
+tests/test_env_config.py::TestLoggingPasswordProtection::test_print_config_without_masking_shows_password PASSED [ 63%]
+tests/test_env_config.py::TestPasswordInExceptions::test_invalid_oracle_uri_masks_password PASSED [ 66%]
+tests/test_env_config.py::TestPasswordInExceptions::test_missing_port_error_masks_password FAILED [ 70%]
+tests/test_env_config.py::TestPasswordInExceptions::test_missing_database_name_masks_password PASSED [ 73%]
+tests/test_env_config.py::TestIntegrationPasswordSecurity::test_full_workflow_no_password_leak FAILED [ 76%]
+tests/test_env_config.py::TestIntegrationPasswordSecurity::test_multiple_configs_no_cross_contamination FAILED [ 80%]
+tests/test_env_config.py::TestEdgeCases::test_empty_password FAILED      [ 83%]
+tests/test_env_config.py::TestEdgeCases::test_password_with_colon FAILED [ 86%]
+tests/test_env_config.py::TestEdgeCases::test_very_long_password FAILED  [ 90%]
+tests/test_env_config.py::test_password_masking_all_db_types[oracle-oracle://user:Pass123@localhost:1521/ORCL-Pass123-LIB_DIR=/opt/oracle\n] FAILED [ 93%]
+tests/test_env_config.py::test_password_masking_all_db_types[postgresql-postgresql://user:PgSecret@db:5432/mydb-PgSecret-] FAILED [ 96%]
+tests/test_env_config.py::test_password_masking_all_db_types[oracle-oracle+cx_oracle://user:Tiger2024@host:1521/xe-Tiger2024-LIB_DIR=/opt/oracle\n] FAILED [100%]
+
+========================================================================================== FAILURES ==========================================================================================
+______________________________ TestPasswordMasking.test_mask_connection_string[oracle://scott:tiger@localhost:1521/ORCL-oracle://scott:***@localhost:1521/ORCL] ______________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x00000281529A1590>, uri = 'oracle://scott:tiger@localhost:1521/ORCL', expected_masked = 'oracle://scott:***@localhost:1521/ORCL'
+
+    @pytest.mark.parametrize(
+        'uri,expected_masked',
+        [
+            # Oracle с паролем
+            (
+                'oracle://scott:tiger@localhost:1521/ORCL',
+                'oracle://scott:***@localhost:1521/ORCL',
+            ),
+            # PostgreSQL с паролем
+            (
+                'postgresql://admin:SecretPass@db.local:5432/mydb',
+                'postgresql://admin:***@db.local:5432/mydb',
+            ),
+            # Пароль со спецсимволами
+            (
+                'postgresql://user:P@ssw0rd@host:5432/db',
+                'postgresql://user:***@host:5432/db',
+            ),
+            # Oracle+cx_oracle драйвер
+            (
+                'oracle+cx_oracle://user:password@localhost:1521/xe',
+                'oracle+cx_oracle://user:***@localhost:1521/xe',
+            ),
+            # PostgreSQL+psycopg2
+            (
+                'postgresql+psycopg2://user:pass123@db:5432/mydb',
+                'postgresql+psycopg2://user:***@db:5432/mydb',
+            ),
+            # URI без пароля (не должно измениться)
+            (
+                'oracle://user@localhost:1521/ORCL',
+                'oracle://user@localhost:1521/ORCL',
+            ),
+            # SQLite (не содержит паролей)
+            ('sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'),
+            # TNS имя Oracle (без схемы)
+            ('MYDB_TNS', 'MYDB_TNS'),
+            # Пустая строка
+            ('', ''),
+        ],
+    )
+    def test_mask_connection_string(self, uri: str, expected_masked: str):
+        """Проверка маскировки различных форматов connection strings."""
+        masked = Settings.mask_connection_string(uri)
+>       assert masked == expected_masked
+E       AssertionError: assert 'oracle://scott:%2A%2A%2A@localhost:1521/ORCL' == 'oracle://scott:***@localhost:1521/ORCL'
+E         
+E         - oracle://scott:***@localhost:1521/ORCL
+E         ?                ^^^
+E         + oracle://scott:%2A%2A%2A@localhost:1521/ORCL
+E         ?                ^^^^^^^^^
+
+tests\test_env_config.py:105: AssertionError
+________________________ TestPasswordMasking.test_mask_connection_string[postgresql://admin:SecretPass@db.local:5432/mydb-postgresql://admin:***@db.local:5432/mydb] _________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x00000281529A16D0>, uri = 'postgresql://admin:SecretPass@db.local:5432/mydb'
+expected_masked = 'postgresql://admin:***@db.local:5432/mydb'
+
+    @pytest.mark.parametrize(
+        'uri,expected_masked',
+        [
+            # Oracle с паролем
+            (
+                'oracle://scott:tiger@localhost:1521/ORCL',
+                'oracle://scott:***@localhost:1521/ORCL',
+            ),
+            # PostgreSQL с паролем
+            (
+                'postgresql://admin:SecretPass@db.local:5432/mydb',
+                'postgresql://admin:***@db.local:5432/mydb',
+            ),
+            # Пароль со спецсимволами
+            (
+                'postgresql://user:P@ssw0rd@host:5432/db',
+                'postgresql://user:***@host:5432/db',
+            ),
+            # Oracle+cx_oracle драйвер
+            (
+                'oracle+cx_oracle://user:password@localhost:1521/xe',
+                'oracle+cx_oracle://user:***@localhost:1521/xe',
+            ),
+            # PostgreSQL+psycopg2
+            (
+                'postgresql+psycopg2://user:pass123@db:5432/mydb',
+                'postgresql+psycopg2://user:***@db:5432/mydb',
+            ),
+            # URI без пароля (не должно измениться)
+            (
+                'oracle://user@localhost:1521/ORCL',
+                'oracle://user@localhost:1521/ORCL',
+            ),
+            # SQLite (не содержит паролей)
+            ('sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'),
+            # TNS имя Oracle (без схемы)
+            ('MYDB_TNS', 'MYDB_TNS'),
+            # Пустая строка
+            ('', ''),
+        ],
+    )
+    def test_mask_connection_string(self, uri: str, expected_masked: str):
+        """Проверка маскировки различных форматов connection strings."""
+        masked = Settings.mask_connection_string(uri)
+>       assert masked == expected_masked
+E       AssertionError: assert 'postgresql://admin:%2A%2A%2A@db.local:5432/mydb' == 'postgresql://admin:***@db.local:5432/mydb'
+E         
+E         - postgresql://admin:***@db.local:5432/mydb
+E         ?                    ^^^
+E         + postgresql://admin:%2A%2A%2A@db.local:5432/mydb
+E         ?                    ^^^^^^^^^
+
+tests\test_env_config.py:105: AssertionError
+________________________________ TestPasswordMasking.test_mask_connection_string[postgresql://user:P@ssw0rd@host:5432/db-postgresql://user:***@host:5432/db] _________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028151929E00>, uri = 'postgresql://user:P@ssw0rd@host:5432/db', expected_masked = 'postgresql://user:***@host:5432/db'
+
+    @pytest.mark.parametrize(
+        'uri,expected_masked',
+        [
+            # Oracle с паролем
+            (
+                'oracle://scott:tiger@localhost:1521/ORCL',
+                'oracle://scott:***@localhost:1521/ORCL',
+            ),
+            # PostgreSQL с паролем
+            (
+                'postgresql://admin:SecretPass@db.local:5432/mydb',
+                'postgresql://admin:***@db.local:5432/mydb',
+            ),
+            # Пароль со спецсимволами
+            (
+                'postgresql://user:P@ssw0rd@host:5432/db',
+                'postgresql://user:***@host:5432/db',
+            ),
+            # Oracle+cx_oracle драйвер
+            (
+                'oracle+cx_oracle://user:password@localhost:1521/xe',
+                'oracle+cx_oracle://user:***@localhost:1521/xe',
+            ),
+            # PostgreSQL+psycopg2
+            (
+                'postgresql+psycopg2://user:pass123@db:5432/mydb',
+                'postgresql+psycopg2://user:***@db:5432/mydb',
+            ),
+            # URI без пароля (не должно измениться)
+            (
+                'oracle://user@localhost:1521/ORCL',
+                'oracle://user@localhost:1521/ORCL',
+            ),
+            # SQLite (не содержит паролей)
+            ('sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'),
+            # TNS имя Oracle (без схемы)
+            ('MYDB_TNS', 'MYDB_TNS'),
+            # Пустая строка
+            ('', ''),
+        ],
+    )
+    def test_mask_connection_string(self, uri: str, expected_masked: str):
+        """Проверка маскировки различных форматов connection strings."""
+        masked = Settings.mask_connection_string(uri)
+>       assert masked == expected_masked
+E       AssertionError: assert 'postgresql://user:%2A%2A%2A@ssw0rd@host:5432/db' == 'postgresql://user:***@host:5432/db'
+E         
+E         - postgresql://user:***@host:5432/db
+E         ?                   ^^^
+E         + postgresql://user:%2A%2A%2A@ssw0rd@host:5432/db
+E         ?                   ^^^^^^^^^^^^^^^^
+
+tests\test_env_config.py:105: AssertionError
+_____________________ TestPasswordMasking.test_mask_connection_string[oracle+cx_oracle://user:password@localhost:1521/xe-oracle+cx_oracle://user:***@localhost:1521/xe] ______________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x000002815192A060>, uri = 'oracle+cx_oracle://user:password@localhost:1521/xe'
+expected_masked = 'oracle+cx_oracle://user:***@localhost:1521/xe'
+
+    @pytest.mark.parametrize(
+        'uri,expected_masked',
+        [
+            # Oracle с паролем
+            (
+                'oracle://scott:tiger@localhost:1521/ORCL',
+                'oracle://scott:***@localhost:1521/ORCL',
+            ),
+            # PostgreSQL с паролем
+            (
+                'postgresql://admin:SecretPass@db.local:5432/mydb',
+                'postgresql://admin:***@db.local:5432/mydb',
+            ),
+            # Пароль со спецсимволами
+            (
+                'postgresql://user:P@ssw0rd@host:5432/db',
+                'postgresql://user:***@host:5432/db',
+            ),
+            # Oracle+cx_oracle драйвер
+            (
+                'oracle+cx_oracle://user:password@localhost:1521/xe',
+                'oracle+cx_oracle://user:***@localhost:1521/xe',
+            ),
+            # PostgreSQL+psycopg2
+            (
+                'postgresql+psycopg2://user:pass123@db:5432/mydb',
+                'postgresql+psycopg2://user:***@db:5432/mydb',
+            ),
+            # URI без пароля (не должно измениться)
+            (
+                'oracle://user@localhost:1521/ORCL',
+                'oracle://user@localhost:1521/ORCL',
+            ),
+            # SQLite (не содержит паролей)
+            ('sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'),
+            # TNS имя Oracle (без схемы)
+            ('MYDB_TNS', 'MYDB_TNS'),
+            # Пустая строка
+            ('', ''),
+        ],
+    )
+    def test_mask_connection_string(self, uri: str, expected_masked: str):
+        """Проверка маскировки различных форматов connection strings."""
+        masked = Settings.mask_connection_string(uri)
+>       assert masked == expected_masked
+E       AssertionError: assert 'oracle+cx_oracle://user:%2A%2A%2A@localhost:1521/xe' == 'oracle+cx_oracle://user:***@localhost:1521/xe'
+E         
+E         - oracle+cx_oracle://user:***@localhost:1521/xe
+E         ?                         ^^^
+E         + oracle+cx_oracle://user:%2A%2A%2A@localhost:1521/xe
+E         ?                         ^^^^^^^^^
+
+tests\test_env_config.py:105: AssertionError
+________________________ TestPasswordMasking.test_mask_connection_string[postgresql+psycopg2://user:pass123@db:5432/mydb-postgresql+psycopg2://user:***@db:5432/mydb] ________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028152A203B0>, uri = 'postgresql+psycopg2://user:pass123@db:5432/mydb'
+expected_masked = 'postgresql+psycopg2://user:***@db:5432/mydb'
+
+    @pytest.mark.parametrize(
+        'uri,expected_masked',
+        [
+            # Oracle с паролем
+            (
+                'oracle://scott:tiger@localhost:1521/ORCL',
+                'oracle://scott:***@localhost:1521/ORCL',
+            ),
+            # PostgreSQL с паролем
+            (
+                'postgresql://admin:SecretPass@db.local:5432/mydb',
+                'postgresql://admin:***@db.local:5432/mydb',
+            ),
+            # Пароль со спецсимволами
+            (
+                'postgresql://user:P@ssw0rd@host:5432/db',
+                'postgresql://user:***@host:5432/db',
+            ),
+            # Oracle+cx_oracle драйвер
+            (
+                'oracle+cx_oracle://user:password@localhost:1521/xe',
+                'oracle+cx_oracle://user:***@localhost:1521/xe',
+            ),
+            # PostgreSQL+psycopg2
+            (
+                'postgresql+psycopg2://user:pass123@db:5432/mydb',
+                'postgresql+psycopg2://user:***@db:5432/mydb',
+            ),
+            # URI без пароля (не должно измениться)
+            (
+                'oracle://user@localhost:1521/ORCL',
+                'oracle://user@localhost:1521/ORCL',
+            ),
+            # SQLite (не содержит паролей)
+            ('sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'),
+            # TNS имя Oracle (без схемы)
+            ('MYDB_TNS', 'MYDB_TNS'),
+            # Пустая строка
+            ('', ''),
+        ],
+    )
+    def test_mask_connection_string(self, uri: str, expected_masked: str):
+        """Проверка маскировки различных форматов connection strings."""
+        masked = Settings.mask_connection_string(uri)
+>       assert masked == expected_masked
+E       AssertionError: assert 'postgresql+psycopg2://user:%2A%2A%2A@db:5432/mydb' == 'postgresql+psycopg2://user:***@db:5432/mydb'
+E         
+E         - postgresql+psycopg2://user:***@db:5432/mydb
+E         ?                            ^^^
+E         + postgresql+psycopg2://user:%2A%2A%2A@db:5432/mydb
+E         ?                            ^^^^^^^^^
+
+tests\test_env_config.py:105: AssertionError
+__________________________________________________________________ TestPasswordMasking.test_mask_various_passwords[simple] ___________________________________________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028152967B60>, password = 'simple'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+_________________________________________________________________ TestPasswordMasking.test_mask_various_passwords[P@ssw0rd!] _________________________________________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028152967C50>, password = 'P@ssw0rd!'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@ssw0rd!@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+_________________________________________________________________ TestPasswordMasking.test_mask_various_passwords[pass_word] _________________________________________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028152A05FD0>, password = 'pass_word'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+__________________________________________________________________ TestPasswordMasking.test_mask_various_passwords[123456] ___________________________________________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x0000028152A06190>, password = '123456'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+_______________________________________________________________ TestPasswordMasking.test_mask_various_passwords[pass-word-123] _______________________________________________________________
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x000002815191F5F0>, password = 'pass-word-123'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+____ TestPasswordMasking.test_mask_various_passwords[alongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpassword] _____
+
+self = <tests.test_env_config.TestPasswordMasking object at 0x00000281529B4E90>
+password = 'alongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpassword'
+
+    @pytest.mark.parametrize(
+        'password',
+        [
+            'simple',
+            'P@ssw0rd!',
+            'pass_word',
+            '123456',
+            'pass-word-123',
+            'alongpassword' * 10,
+        ],
+    )
+    def test_mask_various_passwords(self, password: str):
+        """Тест маскировки паролей с различными символами."""
+        uri = f'oracle://testuser:{password}@localhost:1521/TESTDB'
+        masked = Settings.mask_connection_string(uri)
+    
+        assert password not in masked, f"Пароль '{password}' виден в: {masked}"
+>       assert 'testuser:***@' in masked
+E       AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+
+tests\test_env_config.py:132: AssertionError
+_______________________________________________________ TestLoggingPasswordProtection.test_print_config_summary_masks_password_in_logs _______________________________________________________
+
+self = <tests.test_env_config.TestLoggingPasswordProtection object at 0x00000281529A1BD0>
+oracle_env_file = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_print_config_summary_mask0/.env')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x000002815295FB60>
+
+    def test_print_config_summary_masks_password_in_logs(self, oracle_env_file: Path, caplog):
+        """Проверка, что print_config_summary не выводит пароли в лог."""
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(oracle_env_file))
+    
+        logger = logging.getLogger('test_security')
+        logger.setLevel(logging.INFO)
+    
+        with caplog.at_level(logging.INFO, logger='test_security'):
+            print_config_summary(config, mask_sensitive=True, logger=logger)
+    
+        log_output = caplog.text
+    
+        # Пароль НЕ должен попасть в лог
+        assert 'SecretPassword123' not in log_output, 'КРИТИЧНО: Пароль обнаружен в логах!'
+    
+        # Замаскированная версия должна быть в логе
+>       assert '***' in log_output
+E       AssertionError: assert '***' in 'INFO     test_security:env_config.py:370 ============================================================\nINFO     test_security:env_config.py:371 \u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\nINFO     test_security:env_config.py:372 ============================================================\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Db Type                     : oracle\nINFO     test_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nINFO     test_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Log Level                   : DEBUG\nINFO     test_security:env_config.py:391  Log File                    : ./logs/oracle_export.log\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Output Dir                  : ./test_exports\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Fetch Array Size            : 1000\nINFO     test_security:env_config.py:391  Chunk Size                  : 5000\nINFO     test_security:env_config.py:391  Query Timeout               : 300\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [Excel]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Max Column Width            : 50\nINFO     test_security:env_config.py:391  Max Rows Per Sheet          : 1000000\nINFO     test_security:env_config.py:391  Wrap Long Text              : True\nINFO     test_security:env_config.py:391  Null Value Replacement      : \nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Enable Batch Processing     : False\nINFO     test_security:env_config.py:391  Batch Size                  : 50000\nINFO     test_security:env_config.py:391  Show Progress Bar           : True\nINFO     test_security:env_config.py:391  Progress Update Interval    : 100\nINFO     test_security:env_config.py:395 \nINFO     test_security:env_config.py:396 ============================================================\n'
+
+tests\test_env_config.py:207: AssertionError
+------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------
+INFO     test_security:env_config.py:370 ============================================================
+INFO     test_security:env_config.py:371 КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+INFO     test_security:env_config.py:372 ============================================================
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [База данных]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Db Type                     : oracle
+INFO     test_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB
+INFO     test_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [Логирование]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Log Level                   : DEBUG
+INFO     test_security:env_config.py:391  Log File                    : ./logs/oracle_export.log
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [Экспорт]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Output Dir                  : ./test_exports
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [Производительность]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Fetch Array Size            : 1000
+INFO     test_security:env_config.py:391  Chunk Size                  : 5000
+INFO     test_security:env_config.py:391  Query Timeout               : 300
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [Excel]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Max Column Width            : 50
+INFO     test_security:env_config.py:391  Max Rows Per Sheet          : 1000000
+INFO     test_security:env_config.py:391  Wrap Long Text              : True
+INFO     test_security:env_config.py:391  Null Value Replacement      : 
+INFO     test_security:env_config.py:381 
+INFO     test_security:env_config.py:382 [Батч обработка]
+INFO     test_security:env_config.py:383 ----------------------------------------
+INFO     test_security:env_config.py:391  Enable Batch Processing     : False
+INFO     test_security:env_config.py:391  Batch Size                  : 50000
+INFO     test_security:env_config.py:391  Show Progress Bar           : True
+INFO     test_security:env_config.py:391  Progress Update Interval    : 100
+INFO     test_security:env_config.py:395 
+INFO     test_security:env_config.py:396 ============================================================
+_______________________________________________________ TestLoggingPasswordProtection.test_print_config_summary_console_masks_password _______________________________________________________
+
+self = <tests.test_env_config.TestLoggingPasswordProtection object at 0x00000281529A1E50>
+postgres_env_file = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_print_config_summary_cons0/.env')
+capsys = <_pytest.capture.CaptureFixture object at 0x000002815295FCB0>
+
+    def test_print_config_summary_console_masks_password(self, postgres_env_file: Path, capsys):
+        """Проверка маскировки паролей в консольном выводе."""
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(postgres_env_file))
+    
+        print_config_summary(config, mask_sensitive=True, logger=None)
+        captured = capsys.readouterr()
+    
+        assert 'MyP@ssw0rd!' not in captured.out, 'КРИТИЧНО: Пароль в консоли!'
+>       assert 'postgresql://pguser:***@db.example.com:5432/testdb' in captured.out
+E       AssertionError: assert 'postgresql://pguser:***@db.example.com:5432/testdb' in '\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n'
+E        +  where '\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n' = CaptureResult(out='\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n', err='').out
+
+tests\test_env_config.py:219: AssertionError
+______________________________________________________________ TestPasswordInExceptions.test_missing_port_error_masks_password _______________________________________________________________
+
+self = <tests.test_env_config.TestPasswordInExceptions object at 0x00000281529A2210>
+tmp_path = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_missing_port_error_masks_0')
+
+    def test_missing_port_error_masks_password(self, tmp_path: Path):
+        """Ошибка отсутствия порта маскирует пароль."""
+        env_content = (
+            'DB_TYPE=postgresql\nDB_CONNECT_URI=postgresql://admin:VerySecret@dbhost/mydb\n'
+        )
+        env_file = tmp_path / '.env'
+        env_file.write_text(env_content)
+    
+        with patch.dict('os.environ', {}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                load_config(str(env_file))
+    
+        error_msg = str(exc_info.value)
+        assert 'VerySecret' not in error_msg, 'КРИТИЧНО: Пароль в сообщении об ошибке!'
+>       assert '***' in error_msg
+E       AssertionError: assert '***' in '\u041e\u0448\u0438\u0431\u043a\u0430 \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0438 \u043a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438:\n \u2022 db_connect_uri: Value error, URI \u043d\u0435 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043f\u043e\u0440\u0442. \u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043f\u043e\u0440\u0442 \u044f\u0432\u043d\u043e (\u0441\u0442\u0430\u043d\u0434\u0430\u0440\u0442\u043d\u044b\u0439 \u0434\u043b\u044f POSTGRESQL: 5432). URI: postgresql://admin:%2A%2A%2A@dbhost/mydb'
+
+tests\test_env_config.py:275: AssertionError
+------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------
+ERROR    oracle_exporter.config:env_config.py:327 Ошибка валидации конфигурации:
+ • db_connect_uri: Value error, URI не содержит порт. Укажите порт явно (стандартный для POSTGRESQL: 5432). URI: postgresql://admin:%2A%2A%2A@dbhost/mydb
+Traceback (most recent call last):
+  File "C:\Work\2025\oracle-to-excel\src\oracle_to_excel\env_config.py", line 308, in load_config
+    return Settings()
+  File "C:\Work\2025\oracle-to-excel\.venv\Lib\site-packages\pydantic_settings\main.py", line 194, in __init__
+    super().__init__(
+    ~~~~~~~~~~~~~~~~^
+        **__pydantic_self__._settings_build_values(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<27 lines>...
+        )
+        ^
+    )
+    ^
+  File "C:\Work\2025\oracle-to-excel\.venv\Lib\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+db_connect_uri
+  Value error, URI не содержит порт. Укажите порт явно (стандартный для POSTGRESQL: 5432). URI: postgresql://admin:%2A%2A%2A@dbhost/mydb [type=value_error, input_value='postgresql://admin:VerySecret@dbhost/mydb', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.12/v/value_error
+____________________________________________________________ TestIntegrationPasswordSecurity.test_full_workflow_no_password_leak _____________________________________________________________
+
+self = <tests.test_env_config.TestIntegrationPasswordSecurity object at 0x00000281529A25D0>
+oracle_env_file = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_full_workflow_no_password0/.env')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x0000028152B32850>
+
+    def test_full_workflow_no_password_leak(self, oracle_env_file: Path, caplog):
+        """Полный workflow: загрузка -> валидация -> логирование без утечки пароля."""
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(oracle_env_file))
+    
+        logger = logging.getLogger('integration_security')
+        logger.setLevel(logging.DEBUG)
+    
+        with caplog.at_level(logging.DEBUG):
+            # Выводим конфигурацию
+            print_config_summary(config, mask_sensitive=True, logger=logger)
+    
+            # Имитируем логирование в приложении
+            logger.info('DB Type: %s', config.db_type)
+            logger.info('Connecting to: %s', config.model_dump_masked()['db_connect_uri'])
+            logger.debug('Config: %s', config.model_dump_masked())
+    
+        full_log = caplog.text
+    
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: пароль нигде не должен светиться
+        assert 'SecretPassword123' not in full_log, 'УТЕЧКА ПАРОЛЯ В ЛОГАХ!'
+    
+        # Замаскированные данные должны быть
+>       assert '***' in full_log
+E       assert '***' in "INFO     integration_security:env_config.py:370 ============================================================\nINFO     integration_security:env_config.py:371 \u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\nINFO     integration_security:env_config.py:372 ============================================================\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Db Type                     : oracle\nINFO     integration_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nINFO     integration_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Log Level                   : DEBUG\nINFO     integration_security:env_config.py:391  Log File                    : ./logs/oracle_export.log\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Output Dir                  : ./test_exports\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Fetch Array Size            : 1000\nINFO     integration_security:env_config.py:391  Chunk Size                  : 5000\nINFO     integration_security:env_config.py:391  Query Timeout               : 300\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [Excel]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Max Column Width            : 50\nINFO     integration_security:env_config.py:391  Max Rows Per Sheet          : 1000000\nINFO     integration_security:env_config.py:391  Wrap Long Text              : True\nINFO     integration_security:env_config.py:391  Null Value Replacement      : \nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Enable Batch Processing     : False\nINFO     integration_security:env_config.py:391  Batch Size                  : 50000\nINFO     integration_security:env_config.py:391  Show Progress Bar           : True\nINFO     integration_security:env_config.py:391  Progress Update Interval    : 100\nINFO     integration_security:env_config.py:395 \nINFO     integration_security:env_config.py:396 ============================================================\nINFO     integration_security:test_env_config.py:343 DB Type: oracle\nINFO     integration_security:test_env_config.py:344 Connecting to: oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nDEBUG    integration_security:test_env_config.py:345 Config: {'db_type': 'oracle', 'db_connect_uri': 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB', 'lib_dir': '/opt/oracle/instantclient_21_1', 'log_level': 'DEBUG', 'log_file': './logs/oracle_export.log', 'output_dir': './test_exports', 'fetch_array_size': 1000, 'chunk_size': 5000, 'query_timeout': 300, 'max_column_width': 50, 'null_value_replacement': '', 'wrap_long_text': True, 'max_rows_per_sheet': 1000000, 'enable_batch_processing': False, 'batch_size': 50000, 'show_progress_bar': True, 'progress_update_interval': 100}\n"
+
+tests\test_env_config.py:353: AssertionError
+------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------
+INFO     integration_security:env_config.py:370 ============================================================
+INFO     integration_security:env_config.py:371 КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ
+INFO     integration_security:env_config.py:372 ============================================================
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [База данных]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Db Type                     : oracle
+INFO     integration_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB
+INFO     integration_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [Логирование]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Log Level                   : DEBUG
+INFO     integration_security:env_config.py:391  Log File                    : ./logs/oracle_export.log
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [Экспорт]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Output Dir                  : ./test_exports
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [Производительность]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Fetch Array Size            : 1000
+INFO     integration_security:env_config.py:391  Chunk Size                  : 5000
+INFO     integration_security:env_config.py:391  Query Timeout               : 300
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [Excel]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Max Column Width            : 50
+INFO     integration_security:env_config.py:391  Max Rows Per Sheet          : 1000000
+INFO     integration_security:env_config.py:391  Wrap Long Text              : True
+INFO     integration_security:env_config.py:391  Null Value Replacement      : 
+INFO     integration_security:env_config.py:381 
+INFO     integration_security:env_config.py:382 [Батч обработка]
+INFO     integration_security:env_config.py:383 ----------------------------------------
+INFO     integration_security:env_config.py:391  Enable Batch Processing     : False
+INFO     integration_security:env_config.py:391  Batch Size                  : 50000
+INFO     integration_security:env_config.py:391  Show Progress Bar           : True
+INFO     integration_security:env_config.py:391  Progress Update Interval    : 100
+INFO     integration_security:env_config.py:395 
+INFO     integration_security:env_config.py:396 ============================================================
+INFO     integration_security:test_env_config.py:343 DB Type: oracle
+INFO     integration_security:test_env_config.py:344 Connecting to: oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB
+DEBUG    integration_security:test_env_config.py:345 Config: {'db_type': 'oracle', 'db_connect_uri': 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB', 'lib_dir': '/opt/oracle/instantclient_21_1', 'log_level': 'DEBUG', 'log_file': './logs/oracle_export.log', 'output_dir': './test_exports', 'fetch_array_size': 1000, 'chunk_size': 5000, 'query_timeout': 300, 'max_column_width': 50, 'null_value_replacement': '', 'wrap_long_text': True, 'max_rows_per_sheet': 1000000, 'enable_batch_processing': False, 'batch_size': 50000, 'show_progress_bar': True, 'progress_update_interval': 100}
+________________________________________________________ TestIntegrationPasswordSecurity.test_multiple_configs_no_cross_contamination ________________________________________________________
+
+env_file = 'C:\\Users\\olgaz\\AppData\\Local\\Temp\\pytest-of-unknown\\pytest-15\\test_multiple_configs_no_cross0\\oracle.env'
+
+    def load_config(env_file: str = '.env') -> Settings:
+        """Загружает конфигурацию из .env файла."""
+        env_path = Path(env_file)
+        if not env_path.exists():
+            error_msg = f'Файл конфигурации не найден: {env_path.absolute()}'
+            logger = get_logger('config') if LOGGER_AVAILABLE else logging.getLogger('config')
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        try:
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(env_path.parent)
+>               return Settings()
+                       ^^^^^^^^^^
+
+src\oracle_to_excel\env_config.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+__pydantic_self__ = Settings(), _case_sensitive = None, _nested_model_default_partial_update = None, _env_prefix = None, _env_file = WindowsPath('.'), _env_file_encoding = None
+_env_ignore_empty = None, _env_nested_delimiter = None, _env_nested_max_split = None, _env_parse_none_str = None, _env_parse_enums = None, _cli_prog_name = None, _cli_parse_args = None
+_cli_settings_source = None, _cli_parse_none_str = None, _cli_hide_none_type = None, _cli_avoid_json = None, _cli_enforce_required = None, _cli_use_class_docs_for_groups = None
+_cli_exit_on_error = None, _cli_prefix = None, _cli_flag_prefix_char = None, _cli_implicit_flags = None, _cli_ignore_unknown_args = None, _cli_kebab_case = None, _cli_shortcuts = None
+_secrets_dir = None, values = {}
+
+    def __init__(
+        __pydantic_self__,
+        _case_sensitive: bool | None = None,
+        _nested_model_default_partial_update: bool | None = None,
+        _env_prefix: str | None = None,
+        _env_file: DotenvType | None = ENV_FILE_SENTINEL,
+        _env_file_encoding: str | None = None,
+        _env_ignore_empty: bool | None = None,
+        _env_nested_delimiter: str | None = None,
+        _env_nested_max_split: int | None = None,
+        _env_parse_none_str: str | None = None,
+        _env_parse_enums: bool | None = None,
+        _cli_prog_name: str | None = None,
+        _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_parse_none_str: str | None = None,
+        _cli_hide_none_type: bool | None = None,
+        _cli_avoid_json: bool | None = None,
+        _cli_enforce_required: bool | None = None,
+        _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_exit_on_error: bool | None = None,
+        _cli_prefix: str | None = None,
+        _cli_flag_prefix_char: str | None = None,
+        _cli_implicit_flags: bool | None = None,
+        _cli_ignore_unknown_args: bool | None = None,
+        _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
+        _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
+        _secrets_dir: PathType | None = None,
+        **values: Any,
+    ) -> None:
+>       super().__init__(
+            **__pydantic_self__._settings_build_values(
+                values,
+                _case_sensitive=_case_sensitive,
+                _nested_model_default_partial_update=_nested_model_default_partial_update,
+                _env_prefix=_env_prefix,
+                _env_file=_env_file,
+                _env_file_encoding=_env_file_encoding,
+                _env_ignore_empty=_env_ignore_empty,
+                _env_nested_delimiter=_env_nested_delimiter,
+                _env_nested_max_split=_env_nested_max_split,
+                _env_parse_none_str=_env_parse_none_str,
+                _env_parse_enums=_env_parse_enums,
+                _cli_prog_name=_cli_prog_name,
+                _cli_parse_args=_cli_parse_args,
+                _cli_settings_source=_cli_settings_source,
+                _cli_parse_none_str=_cli_parse_none_str,
+                _cli_hide_none_type=_cli_hide_none_type,
+                _cli_avoid_json=_cli_avoid_json,
+                _cli_enforce_required=_cli_enforce_required,
+                _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
+                _cli_exit_on_error=_cli_exit_on_error,
+                _cli_prefix=_cli_prefix,
+                _cli_flag_prefix_char=_cli_flag_prefix_char,
+                _cli_implicit_flags=_cli_implicit_flags,
+                _cli_ignore_unknown_args=_cli_ignore_unknown_args,
+                _cli_kebab_case=_cli_kebab_case,
+                _cli_shortcuts=_cli_shortcuts,
+                _secrets_dir=_secrets_dir,
+            )
+        )
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for Settings
+E       db_type
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+E       db_connect_uri
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+.venv\Lib\site-packages\pydantic_settings\main.py:194: ValidationError
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_env_config.TestIntegrationPasswordSecurity object at 0x00000281529A2710>
+tmp_path = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_multiple_configs_no_cross0')
+
+    def test_multiple_configs_no_cross_contamination(self, tmp_path: Path):
+        """Проверка изоляции паролей между разными конфигами."""
+        # Oracle конфиг
+        oracle_env = tmp_path / 'oracle.env'
+        oracle_env.write_text(
+            'DB_TYPE=oracle\n'
+            'DB_CONNECT_URI=oracle://user1:OraclePass@localhost:1521/ORCL\n'
+            'LIB_DIR=/opt/oracle\n'
+        )
+    
+        # PostgreSQL конфиг
+        pg_env = tmp_path / 'pg.env'
+        pg_env.write_text(
+            'DB_TYPE=postgresql\n'
+            'DB_CONNECT_URI=postgresql://user2:PostgresPass@localhost:5432/pgdb\n'
+        )
+    
+        with patch.dict('os.environ', {}, clear=True):
+>           oracle_config = load_config(str(oracle_env))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_env_config.py:374: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env_file = 'C:\\Users\\olgaz\\AppData\\Local\\Temp\\pytest-of-unknown\\pytest-15\\test_multiple_configs_no_cross0\\oracle.env'
+
+    def load_config(env_file: str = '.env') -> Settings:
+        """Загружает конфигурацию из .env файла."""
+        env_path = Path(env_file)
+        if not env_path.exists():
+            error_msg = f'Файл конфигурации не найден: {env_path.absolute()}'
+            logger = get_logger('config') if LOGGER_AVAILABLE else logging.getLogger('config')
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        try:
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(env_path.parent)
+                return Settings()
+            finally:
+                os.chdir(old_cwd)
+        except ValidationError as e:
+            full_error_msg = _format_validation_error(e)
+>           raise ValueError(full_error_msg) from e
+E           ValueError: Ошибка валидации конфигурации:
+E            • db_type: Field required
+E            • db_connect_uri: Field required
+
+src\oracle_to_excel\env_config.py:313: ValueError
+------------------------------------------------------------------------------------- Captured log call --------------------------------------------------------------------------------------
+ERROR    oracle_exporter.config:env_config.py:327 Ошибка валидации конфигурации:
+ • db_type: Field required
+ • db_connect_uri: Field required
+Traceback (most recent call last):
+  File "C:\Work\2025\oracle-to-excel\src\oracle_to_excel\env_config.py", line 308, in load_config
+    return Settings()
+  File "C:\Work\2025\oracle-to-excel\.venv\Lib\site-packages\pydantic_settings\main.py", line 194, in __init__
+    super().__init__(
+    ~~~~~~~~~~~~~~~~^
+        **__pydantic_self__._settings_build_values(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<27 lines>...
+        )
+        ^
+    )
+    ^
+  File "C:\Work\2025\oracle-to-excel\.venv\Lib\site-packages\pydantic\main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 2 validation errors for Settings
+db_type
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+db_connect_uri
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/missing
+_____________________________________________________________________________ TestEdgeCases.test_empty_password ______________________________________________________________________________
+
+self = <tests.test_env_config.TestEdgeCases object at 0x00000281529A2850>
+
+    def test_empty_password(self):
+        """Пустой пароль (user:@host)."""
+        uri = 'oracle://user:@localhost:1521/ORCL'
+        masked = Settings.mask_connection_string(uri)
+>       assert 'user:***@' in masked
+E       AssertionError: assert 'user:***@' in 'oracle://user:@localhost:1521/ORCL'
+
+tests\test_env_config.py:399: AssertionError
+___________________________________________________________________________ TestEdgeCases.test_password_with_colon ___________________________________________________________________________
+
+self = <tests.test_env_config.TestEdgeCases object at 0x00000281529A2990>
+
+    def test_password_with_colon(self):
+        """Пароль содержит двоеточие."""
+        uri = 'postgresql://user:pass_word_123@host:5432/db'
+        masked = Settings.mask_connection_string(uri)
+        assert 'pass_word_123' not in masked
+>       assert '***' in masked
+E       AssertionError: assert '***' in 'postgresql://user:%2A%2A%2A@host:5432/db'
+
+tests\test_env_config.py:406: AssertionError
+___________________________________________________________________________ TestEdgeCases.test_very_long_password ____________________________________________________________________________
+
+self = <tests.test_env_config.TestEdgeCases object at 0x000002815192A9E0>
+
+    def test_very_long_password(self):
+        """Очень длинный пароль."""
+        long_pass = 'a' * 500
+        uri = f'oracle://user:{long_pass}@localhost:1521/ORCL'
+        masked = Settings.mask_connection_string(uri)
+        assert long_pass not in masked
+>       assert 'user:***@' in masked
+E       AssertionError: assert 'user:***@' in 'oracle://user:%2A%2A%2A@localhost:1521/ORCL'
+
+tests\test_env_config.py:414: AssertionError
+_____________________________________ test_password_masking_all_db_types[oracle-oracle://user:Pass123@localhost:1521/ORCL-Pass123-LIB_DIR=/opt/oracle\n] _____________________________________
+
+tmp_path = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_password_masking_all_db_t0'), db_type = 'oracle', uri = 'oracle://user:Pass123@localhost:1521/ORCL'
+password = 'Pass123', extra_config = 'LIB_DIR=/opt/oracle\n'
+
+    @pytest.mark.parametrize(
+        'db_type,uri,password,extra_config',
+        [
+            (
+                'oracle',
+                'oracle://user:Pass123@localhost:1521/ORCL',
+                'Pass123',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+            ('postgresql', 'postgresql://user:PgSecret@db:5432/mydb', 'PgSecret', ''),
+            (
+                'oracle',
+                'oracle+cx_oracle://user:Tiger2024@host:1521/xe',
+                'Tiger2024',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+        ],
+    )
+    def test_password_masking_all_db_types(
+        tmp_path: Path, db_type: str, uri: str, password: str, extra_config: str
+    ):
+        """Параметризованный тест для всех типов БД."""
+        env_content = f'DB_TYPE={db_type}\nDB_CONNECT_URI={uri}\n{extra_config}'
+    
+        env_file = tmp_path / '.env'
+        env_file.write_text(env_content)
+    
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(env_file))
+    
+        masked = config.model_dump_masked()
+    
+        # Пароль не должен быть виден
+        assert password not in str(masked), f"Пароль '{password}' обнаружен для {db_type}!"
+>       assert '***' in masked['db_connect_uri']
+E       AssertionError: assert '***' in 'oracle://user:%2A%2A%2A@localhost:1521/ORCL'
+
+tests\test_env_config.py:490: AssertionError
+______________________________________________ test_password_masking_all_db_types[postgresql-postgresql://user:PgSecret@db:5432/mydb-PgSecret-] ______________________________________________
+
+tmp_path = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_password_masking_all_db_t1'), db_type = 'postgresql'
+uri = 'postgresql://user:PgSecret@db:5432/mydb', password = 'PgSecret', extra_config = ''
+
+    @pytest.mark.parametrize(
+        'db_type,uri,password,extra_config',
+        [
+            (
+                'oracle',
+                'oracle://user:Pass123@localhost:1521/ORCL',
+                'Pass123',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+            ('postgresql', 'postgresql://user:PgSecret@db:5432/mydb', 'PgSecret', ''),
+            (
+                'oracle',
+                'oracle+cx_oracle://user:Tiger2024@host:1521/xe',
+                'Tiger2024',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+        ],
+    )
+    def test_password_masking_all_db_types(
+        tmp_path: Path, db_type: str, uri: str, password: str, extra_config: str
+    ):
+        """Параметризованный тест для всех типов БД."""
+        env_content = f'DB_TYPE={db_type}\nDB_CONNECT_URI={uri}\n{extra_config}'
+    
+        env_file = tmp_path / '.env'
+        env_file.write_text(env_content)
+    
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(env_file))
+    
+        masked = config.model_dump_masked()
+    
+        # Пароль не должен быть виден
+        assert password not in str(masked), f"Пароль '{password}' обнаружен для {db_type}!"
+>       assert '***' in masked['db_connect_uri']
+E       AssertionError: assert '***' in 'postgresql://user:%2A%2A%2A@db:5432/mydb'
+
+tests\test_env_config.py:490: AssertionError
+_________________________________ test_password_masking_all_db_types[oracle-oracle+cx_oracle://user:Tiger2024@host:1521/xe-Tiger2024-LIB_DIR=/opt/oracle\n] __________________________________
+
+tmp_path = WindowsPath('C:/Users/olgaz/AppData/Local/Temp/pytest-of-unknown/pytest-15/test_password_masking_all_db_t2'), db_type = 'oracle'
+uri = 'oracle+cx_oracle://user:Tiger2024@host:1521/xe', password = 'Tiger2024', extra_config = 'LIB_DIR=/opt/oracle\n'
+
+    @pytest.mark.parametrize(
+        'db_type,uri,password,extra_config',
+        [
+            (
+                'oracle',
+                'oracle://user:Pass123@localhost:1521/ORCL',
+                'Pass123',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+            ('postgresql', 'postgresql://user:PgSecret@db:5432/mydb', 'PgSecret', ''),
+            (
+                'oracle',
+                'oracle+cx_oracle://user:Tiger2024@host:1521/xe',
+                'Tiger2024',
+                'LIB_DIR=/opt/oracle\n',
+            ),
+        ],
+    )
+    def test_password_masking_all_db_types(
+        tmp_path: Path, db_type: str, uri: str, password: str, extra_config: str
+    ):
+        """Параметризованный тест для всех типов БД."""
+        env_content = f'DB_TYPE={db_type}\nDB_CONNECT_URI={uri}\n{extra_config}'
+    
+        env_file = tmp_path / '.env'
+        env_file.write_text(env_content)
+    
+        with patch.dict('os.environ', {}, clear=True):
+            config = load_config(str(env_file))
+    
+        masked = config.model_dump_masked()
+    
+        # Пароль не должен быть виден
+        assert password not in str(masked), f"Пароль '{password}' обнаружен для {db_type}!"
+>       assert '***' in masked['db_connect_uri']
+E       AssertionError: assert '***' in 'oracle+cx_oracle://user:%2A%2A%2A@host:1521/xe'
+
+tests\test_env_config.py:490: AssertionError
+======================================================================================= tests coverage =======================================================================================
+______________________________________________________________________ coverage: platform win32, python 3.14.0-final-0 _______________________________________________________________________
+
+Coverage HTML written to dir htmlcov
+================================================================================== short test summary info ===================================================================================
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[oracle://scott:tiger@localhost:1521/ORCL-oracle://scott:***@localhost:1521/ORCL] - AssertionError: assert 'oracle://scott:%2A%2A%2A@localhost:1521/ORCL' == 'oracle://scott:***@localhost:1521/ORCL'
+  
+  - oracle://scott:***@localhost:1521/ORCL
+  ?                ^^^
+  + oracle://scott:%2A%2A%2A@localhost:1521/ORCL
+  ?                ^^^^^^^^^
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql://admin:SecretPass@db.local:5432/mydb-postgresql://admin:***@db.local:5432/mydb] - AssertionError: assert 'postgresql://admin:%2A%2A%2A@db.local:5432/mydb' == 'postgresql://admin:***@db.local:5432/mydb'
+  
+  - postgresql://admin:***@db.local:5432/mydb
+  ?                    ^^^
+  + postgresql://admin:%2A%2A%2A@db.local:5432/mydb
+  ?                    ^^^^^^^^^
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql://user:P@ssw0rd@host:5432/db-postgresql://user:***@host:5432/db] - AssertionError: assert 'postgresql://user:%2A%2A%2A@ssw0rd@host:5432/db' == 'postgresql://user:***@host:5432/db'
+  
+  - postgresql://user:***@host:5432/db
+  ?                   ^^^
+  + postgresql://user:%2A%2A%2A@ssw0rd@host:5432/db
+  ?                   ^^^^^^^^^^^^^^^^
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[oracle+cx_oracle://user:password@localhost:1521/xe-oracle+cx_oracle://user:***@localhost:1521/xe] - AssertionError: assert 'oracle+cx_oracle://user:%2A%2A%2A@localhost:1521/xe' == 'oracle+cx_oracle://user:***@localhost:1521/xe'
+  
+  - oracle+cx_oracle://user:***@localhost:1521/xe
+  ?                         ^^^
+  + oracle+cx_oracle://user:%2A%2A%2A@localhost:1521/xe
+  ?                         ^^^^^^^^^
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_connection_string[postgresql+psycopg2://user:pass123@db:5432/mydb-postgresql+psycopg2://user:***@db:5432/mydb] - AssertionError: assert 'postgresql+psycopg2://user:%2A%2A%2A@db:5432/mydb' == 'postgresql+psycopg2://user:***@db:5432/mydb'
+  
+  - postgresql+psycopg2://user:***@db:5432/mydb
+  ?                            ^^^
+  + postgresql+psycopg2://user:%2A%2A%2A@db:5432/mydb
+  ?                            ^^^^^^^^^
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[simple] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[P@ssw0rd!] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@ssw0rd!@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[pass_word] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[123456] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[pass-word-123] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestPasswordMasking::test_mask_various_passwords[alongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpasswordalongpassword] - AssertionError: assert 'testuser:***@' in 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB'
+FAILED tests/test_env_config.py::TestLoggingPasswordProtection::test_print_config_summary_masks_password_in_logs - AssertionError: assert '***' in 'INFO     test_security:env_config.py:370 ============================================================\nINFO     test_security:env_config.py:371 \u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\nINFO     test_security:env_config.py:372 ============================================================\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Db Type                     : oracle\nINFO     test_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nINFO     test_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Log Level                   : DEBUG\nINFO     test_security:env_config.py:391  Log File                    : ./logs/oracle_export.log\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Output Dir                  : ./test_exports\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Fetch Array Size            : 1000\nINFO     test_security:env_config.py:391  Chunk Size                  : 5000\nINFO     test_security:env_config.py:391  Query Timeout               : 300\nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [Excel]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Max Column Width            : 50\nINFO     test_security:env_config.py:391  Max Rows Per Sheet          : 1000000\nINFO     test_security:env_config.py:391  Wrap Long Text              : True\nINFO     test_security:env_config.py:391  Null Value Replacement      : \nINFO     test_security:env_config.py:381 \nINFO     test_security:env_config.py:382 [\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\nINFO     test_security:env_config.py:383 ----------------------------------------\nINFO     test_security:env_config.py:391  Enable Batch Processing     : False\nINFO     test_security:env_config.py:391  Batch Size                  : 50000\nINFO     test_security:env_config.py:391  Show Progress Bar           : True\nINFO     test_security:env_config.py:391  Progress Update Interval    : 100\nINFO     test_security:env_config.py:395 \nINFO     test_security:env_config.py:396 ============================================================\n'
+FAILED tests/test_env_config.py::TestLoggingPasswordProtection::test_print_config_summary_console_masks_password - AssertionError: assert 'postgresql://pguser:***@db.example.com:5432/testdb' in '\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n'
+ +  where '\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n' = CaptureResult(out='\n============================================================\n\u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\n============================================================\n\n[\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\n----------------------------------------\n Db Type                     : postgresql\n Db Connect Uri              : postgresql://pguser:%2A%2A%2A@ssw0rd!@db.example.com:5432/testdb\n\n[\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\n----------------------------------------\n Log Level                   : INFO\n Log File                    : ./logs/oracle_export.log\n\n[\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\n----------------------------------------\n Output Dir                  : ./exports\n\n[\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\n----------------------------------------\n Fetch Array Size            : 1000\n Chunk Size                  : 5000\n Query Timeout               : 300\n\n[Excel]\n----------------------------------------\n Max Column Width            : 50\n Max Rows Per Sheet          : 1000000\n Wrap Long Text              : True\n Null Value Replacement      : \n\n[\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\n----------------------------------------\n Enable Batch Processing     : False\n Batch Size                  : 50000\n Show Progress Bar           : True\n Progress Update Interval    : 100\n============================================================\n\n', err='').out
+FAILED tests/test_env_config.py::TestPasswordInExceptions::test_missing_port_error_masks_password - AssertionError: assert '***' in '\u041e\u0448\u0438\u0431\u043a\u0430 \u0432\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u0438 \u043a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438:\n \u2022 db_connect_uri: Value error, URI \u043d\u0435 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043f\u043e\u0440\u0442. \u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043f\u043e\u0440\u0442 \u044f\u0432\u043d\u043e (\u0441\u0442\u0430\u043d\u0434\u0430\u0440\u0442\u043d\u044b\u0439 \u0434\u043b\u044f POSTGRESQL: 5432). URI: postgresql://admin:%2A%2A%2A@dbhost/mydb'
+FAILED tests/test_env_config.py::TestIntegrationPasswordSecurity::test_full_workflow_no_password_leak - assert '***' in "INFO     integration_security:env_config.py:370 ============================================================\nINFO     integration_security:env_config.py:371 \u041a\u041e\u041d\u0424\u0418\u0413\u0423\u0420\u0410\u0426\u0418\u042f \u041f\u0420\u0418\u041b\u041e\u0416\u0415\u041d\u0418\u042f\nINFO     integration_security:env_config.py:372 ============================================================\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u0411\u0430\u0437\u0430 \u0434\u0430\u043d\u043d\u044b\u0445]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Db Type                     : oracle\nINFO     integration_security:env_config.py:391  Db Connect Uri              : oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nINFO     integration_security:env_config.py:391  Lib Dir                     : /opt/oracle/instantclient_21_1\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Log Level                   : DEBUG\nINFO     integration_security:env_config.py:391  Log File                    : ./logs/oracle_export.log\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u042d\u043a\u0441\u043f\u043e\u0440\u0442]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Output Dir                  : ./test_exports\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Fetch Array Size            : 1000\nINFO     integration_security:env_config.py:391  Chunk Size                  : 5000\nINFO     integration_security:env_config.py:391  Query Timeout               : 300\nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [Excel]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Max Column Width            : 50\nINFO     integration_security:env_config.py:391  Max Rows Per Sheet          : 1000000\nINFO     integration_security:env_config.py:391  Wrap Long Text              : True\nINFO     integration_security:env_config.py:391  Null Value Replacement      : \nINFO     integration_security:env_config.py:381 \nINFO     integration_security:env_config.py:382 [\u0411\u0430\u0442\u0447 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430]\nINFO     integration_security:env_config.py:383 ----------------------------------------\nINFO     integration_security:env_config.py:391  Enable Batch Processing     : False\nINFO     integration_security:env_config.py:391  Batch Size                  : 50000\nINFO     integration_security:env_config.py:391  Show Progress Bar           : True\nINFO     integration_security:env_config.py:391  Progress Update Interval    : 100\nINFO     integration_security:env_config.py:395 \nINFO     integration_security:env_config.py:396 ============================================================\nINFO     integration_security:test_env_config.py:343 DB Type: oracle\nINFO     integration_security:test_env_config.py:344 Connecting to: oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB\nDEBUG    integration_security:test_env_config.py:345 Config: {'db_type': 'oracle', 'db_connect_uri': 'oracle://testuser:%2A%2A%2A@localhost:1521/TESTDB', 'lib_dir': '/opt/oracle/instantclient_21_1', 'log_level': 'DEBUG', 'log_file': './logs/oracle_export.log', 'output_dir': './test_exports', 'fetch_array_size': 1000, 'chunk_size': 5000, 'query_timeout': 300, 'max_column_width': 50, 'null_value_replacement': '', 'wrap_long_text': True, 'max_rows_per_sheet': 1000000, 'enable_batch_processing': False, 'batch_size': 50000, 'show_progress_bar': True, 'progress_update_interval': 100}\n"
+FAILED tests/test_env_config.py::TestIntegrationPasswordSecurity::test_multiple_configs_no_cross_contamination - ValueError: Ошибка валидации конфигурации:
+ • db_type: Field required
+ • db_connect_uri: Field required
+FAILED tests/test_env_config.py::TestEdgeCases::test_empty_password - AssertionError: assert 'user:***@' in 'oracle://user:@localhost:1521/ORCL'
+FAILED tests/test_env_config.py::TestEdgeCases::test_password_with_colon - AssertionError: assert '***' in 'postgresql://user:%2A%2A%2A@host:5432/db'
+FAILED tests/test_env_config.py::TestEdgeCases::test_very_long_password - AssertionError: assert 'user:***@' in 'oracle://user:%2A%2A%2A@localhost:1521/ORCL'
+FAILED tests/test_env_config.py::test_password_masking_all_db_types[oracle-oracle://user:Pass123@localhost:1521/ORCL-Pass123-LIB_DIR=/opt/oracle\n] - AssertionError: assert '***' in 'oracle://user:%2A%2A%2A@localhost:1521/ORCL'
+FAILED tests/test_env_config.py::test_password_masking_all_db_types[postgresql-postgresql://user:PgSecret@db:5432/mydb-PgSecret-] - AssertionError: assert '***' in 'postgresql://user:%2A%2A%2A@db:5432/mydb'
+FAILED tests/test_env_config.py::test_password_masking_all_db_types[oracle-oracle+cx_oracle://user:Tiger2024@host:1521/xe-Tiger2024-LIB_DIR=/opt/oracle\n] - AssertionError: assert '***' in 'oracle+cx_oracle://user:%2A%2A%2A@host:1521/xe'
+========================================================================= 22 failed, 8 passed, 6 deselected in 1.00s =========================================================================

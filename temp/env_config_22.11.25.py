@@ -3,44 +3,38 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import AnyStr, Final, cast
+from typing import Final, cast
+from urllib.parse import urlparse
 
-from dotenv import load_dotenv
 from pydantic import Field, ValidationError, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.exc import ArgumentError
 
+# Импортируем get_logger, если доступен; иначе будем использовать стандартный logging
 try:
-    # Предпочтительно использовать свой логгер — если доступен
     from .logger import get_logger
 
     LOGGER_AVAILABLE = True
 except Exception:
     LOGGER_AVAILABLE = False
 
+# Допустимые типы БД
 VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
-    ('oracle', 'postgres', 'postgresql', 'sqlite', 'sqlite3')
+    (
+        'oracle',
+        'postgres',
+        'postgresql',
+        'sqlite',
+        'sqlite3',
+    )
 )
 
-
-def _get_uri_separator(uri: str) -> str | None:
-    """Определить разделитель схемы в URI.
-
-    Возвращает '://', ':/', '//' или None.
-    """
-    if '://' in uri:
-        return '://'
-    if ':/' in uri:
-        return ':/'
-    if '//' in uri:
-        return '//'
-    return None
-
-
+# Централизованные default значения
 DEFAULT_CONFIG: Mapping[str, int | str | bool] = {
     'LOG_LEVEL': 'INFO',
     'OUTPUT_DIR': './exports',
@@ -69,13 +63,16 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
+    # === Обязательные параметры ===
     db_type: str = Field(..., description='Тип базы данных: oracle, postgres, sqlite')
     db_connect_uri: str = Field(..., description='Connection string для БД')
 
+    # === Опциональные параметры с дефолтами ===
     lib_dir: str | None = Field(
         None, description='Путь к Oracle Instant Client (только для Oracle)'
     )
 
+    # Логирование
     log_level: str = Field(
         default=cast(str, DEFAULT_CONFIG['LOG_LEVEL']),
         description='Уровень логирования',
@@ -84,11 +81,14 @@ class Settings(BaseSettings):
         default=cast(str, DEFAULT_CONFIG['LOG_FILE']),
         description='Путь к файлу логов',
     )
+
+    # Экспорт
     output_dir: str = Field(
         default=cast(str, DEFAULT_CONFIG['OUTPUT_DIR']),
         description='Директория для экспорта',
     )
 
+    # Производительность БД
     fetch_array_size: int = Field(
         default=cast(int, DEFAULT_CONFIG['FETCH_ARRAY_SIZE']),
         ge=1,
@@ -105,6 +105,7 @@ class Settings(BaseSettings):
         description='Таймаут запроса (секунды)',
     )
 
+    # Excel параметры
     max_column_width: int = Field(
         default=cast(int, DEFAULT_CONFIG['MAX_COLUMN_WIDTH']),
         ge=1,
@@ -124,6 +125,7 @@ class Settings(BaseSettings):
         description='Макс. строк на лист',
     )
 
+    # Батч обработка
     enable_batch_processing: bool = Field(
         default=cast(bool, DEFAULT_CONFIG['ENABLE_BATCH_PROCESSING']),
         description='Включить батч обработку',
@@ -143,6 +145,7 @@ class Settings(BaseSettings):
         description='Интервал обновления прогресса',
     )
 
+    # Приватное поле для хранения оригинального connection string
     _original_db_connect_uri: str | None = None
 
     @field_validator(
@@ -177,6 +180,7 @@ class Settings(BaseSettings):
             field_name = info.field_name or ''
             default_value = DEFAULT_CONFIG.get(field_name.upper())
             return default_value if default_value is not None else v
+        # Парсинг строковых boolean
         if isinstance(v, str):
             lower_v = v.lower().strip()
             if lower_v in ('true', '1', 'yes', 'on'):
@@ -201,10 +205,12 @@ class Settings(BaseSettings):
         """Нормализует и валидирует db_type."""
         if not v or v == '':
             raise ValueError('DB_TYPE не может быть пустым')
+
         normalized = v.strip().lower()
         if normalized not in VALID_DB_TYPES:
             valid_types = ', '.join(sorted(VALID_DB_TYPES))
             raise ValueError(f"Недопустимый DB_TYPE='{v}'. Допустимые значения: {valid_types}")
+        # Приводим к каноническому виду
         if normalized in ('postgres', 'postgresql'):
             return 'postgresql'
         if normalized in ('sqlite', 'sqlite3'):
@@ -214,58 +220,29 @@ class Settings(BaseSettings):
     @field_validator('db_connect_uri')
     @classmethod
     def validate_db_connect_uri(cls, v: str, info: ValidationInfo) -> str:
-        """Валидирует строку подключения к БД с помощью SQLAlchemy make_url."""
+        """Валидирует строку подключения к БД и применяет специфичные проверки."""
         if not v or v.strip() == '':
             raise ValueError('DB_CONNECT_URI не может быть пустым')
+
         uri = v.strip()
-        masked_uri = cls.mask_connection_string(uri)
-
         db_type = info.data.get('db_type', '').lower()
-        if not db_type:
-            return uri
-        db_type = cls._normalize_db_type_for_validation(db_type)
 
-        # SQLite has special handling
-        if db_type == 'sqlite':
-            if not uri.startswith('sqlite:'):
-                raise ValueError(f'Для SQLite URI должен начинаться с "sqlite:": {masked_uri}')
-            return uri
+        # Если тип БД определен, применяем дополнительные проверки
+        if db_type:
+            # Нормализуем имена БД
+            db_type = cls._normalize_db_type_for_validation(db_type)
 
-        # Parse URL for other databases
-        cls._validate_url_format(uri, db_type, masked_uri)
+            # Применяем специфичные проверки
+            if db_type == 'sqlite':
+                cls._check_sqlite_uri(uri)
+            elif db_type in ('oracle', 'postgresql'):
+                cls._check_hosted_uri(uri, db_type)
+
         return uri
 
     @staticmethod
-    def _validate_url_format(uri: str, db_type: str, masked_uri: str) -> None:
-        """Валидирует формат URL для Oracle и PostgreSQL."""
-        try:
-            url_obj = make_url(uri)
-        except ArgumentError:
-            error_msg = (
-                f'Некорректный URI для {db_type.upper()}: некорректный формат URL\n'
-                f'URI: {masked_uri}'
-            )
-            raise ValueError(error_msg) from None
-
-        Settings._check_scheme_allowed(url_obj.drivername, db_type, masked_uri)
-        Settings._check_host_and_port(url_obj, db_type, masked_uri)
-        if db_type == 'postgresql' and not url_obj.database:
-            raise ValueError(f'PostgreSQL URI не содержит имя базы данных: {masked_uri}')
-
-    @staticmethod
-    def _check_host_and_port(url_obj: object, db_type: str, masked_uri: str) -> None:
-        """Проверяет наличие hostname и port в URL."""
-        if not getattr(url_obj, 'host', None):
-            raise ValueError(f'URI не содержит hostname: {masked_uri}')
-        if getattr(url_obj, 'port', None) is None:
-            default_port = 1521 if db_type == 'oracle' else 5432
-            raise ValueError(
-                f'URI не содержит порт. Укажите порт явно (стандартный для '
-                f'{db_type.upper()}: {default_port}). URI: {masked_uri}'
-            )
-
-    @staticmethod
     def _normalize_db_type_for_validation(db_type: str) -> str:
+        """Нормализует имя типа БД для валидации."""
         if db_type in ('postgres', 'postgresql'):
             return 'postgresql'
         if db_type in ('sqlite', 'sqlite3'):
@@ -273,67 +250,124 @@ class Settings(BaseSettings):
         return db_type
 
     @staticmethod
-    def _check_scheme_allowed(drivername: str, db_type: str, masked_uri: str) -> None:
-        if db_type == 'oracle':
-            allowed = ('oracle', 'oracle+cx_oracle', 'oracle+oracledb')
-        elif db_type == 'postgresql':
-            allowed = (
-                'postgresql',
-                'postgresql+psycopg2',
-                'postgresql+psycopg',
-                'postgresql+psycopg3',
-            )
-        else:
+    def _mask_uri(uri: str) -> str:
+        if not uri:
+            return uri
+        uri = re.sub(r'([a-zA-Z0-9_.-]+):([^\s@:/]+)@', r'\1:***@', uri)
+        uri = re.sub(
+            r'([a-zA-Z0-9_.-]+):([^\s@:/]+)'
+            r'([a-zA-Z0-9_.-]+):(\d+)',
+            r'\1:***\3:\4',
+            uri,
+            count=1,
+        )
+        uri = re.sub(
+            r'([a-zA-Z0-9_.-]+):([^\s@:/]+)'
+            r'([a-zA-Z0-9_.-]+)',
+            r'\1:***\3',
+            uri,
+            count=1,
+        )
+
+        return re.sub(r'([a-zA-Z0-9_.-]+):([^\s@:/]+)$', r'\1:***', uri)
+
+    @staticmethod
+    def _check_sqlite_uri(uri: str) -> None:
+        if uri.startswith('sqlite://'):
+            parsed = urlparse(uri)
+            if parsed.scheme != 'sqlite':
+                raise ValueError(f'Неверная схема для SQLite URI: {parsed.scheme}')
+        elif uri == ':memory:':
             return
-        if drivername not in allowed:
+        elif '://' in uri:
             msg = (
-                f'Неверная схема для {db_type.title()} URI: {drivername!r}. '
-                f'Ожидается одно из {allowed}. URI: {masked_uri}'
+                'Для SQLite ожидается путь к файлу или "sqlite:///". '
+                f'Получено: {Settings._mask_uri(uri)}'
             )
             raise ValueError(msg)
 
     @staticmethod
-    def mask_connection_string(uri: str) -> str:
-        """Mask password in URI with simple parsing, not SQLAlchemy.
+    def _check_hosted_uri(uri: str, db_type: str) -> None:
+        if '://' not in uri:
+            Settings._check_no_scheme(uri, db_type)
+            return
 
-        SQLAlchemy render_as_string() URL-encodes password: ':***@' -> ':%2A%2A%2A@'.
-        Use simple parsing to preserve readability.
+        Settings._check_credentials_format(uri, db_type)
+        parsed = Settings._parse_uri(uri, db_type)
+        Settings._check_scheme_allowed(parsed.scheme, db_type, uri)
+        Settings._check_hostname_port_dbname(parsed, db_type, uri)
 
-        Handles edge cases like:
-        - Single slash (postgresql:/postgres:pass@host) - malformed
-        - Double slash without colon (postgresql//postgres:pass@host) - malformed
-        - Multiple @ in password (user:p@ss@rd@host)
-        - No password (user@host or host)
-        """
-        if not uri:
-            return uri
+    @staticmethod
+    def _check_scheme_allowed(scheme: str, db_type: str, uri: str) -> None:
+        if db_type == 'oracle':
+            allowed: tuple[str, ...] = (
+                'oracle',
+                'oracle+cx_oracle',
+                'oracle+oracledb',
+            )
+        else:
+            allowed = (
+                'postgres',
+                'postgresql',
+                'postgresql+psycopg2',
+                'postgresql+psycopg',
+            )
+        if scheme not in allowed:
+            msg = (
+                f'Неверная схема для {db_type.title()} URI: {scheme!r}. '
+                f'Ожидается одно из {allowed}. URI: {Settings._mask_uri(uri)}'
+            )
+            raise ValueError(msg)
 
-        # Detect scheme patterns and determine separator
-        separator = _get_uri_separator(uri)
-        if not separator:
-            return uri
+    @staticmethod
+    def _check_hostname_port_dbname(parsed, db_type: str, uri: str) -> None:
+        if not parsed.hostname:
+            raise ValueError(f'URI не содержит hostname: {Settings._mask_uri(uri)}')
+        if not parsed.port:
+            default_port = 1521 if db_type == 'oracle' else 5432
+            raise ValueError(
+                f'URI не содержит порт. Укажите порт явно (стандартный для '
+                f'{db_type.upper()}: {default_port}). URI: {Settings._mask_uri(uri)}'
+            )
+        if db_type == 'postgresql' and not parsed.path.lstrip('/'):
+            raise ValueError(
+                f'PostgreSQL URI не содержит имя базы данных: {Settings._mask_uri(uri)}'
+            )
+        # end of helper
 
-        # Split by appropriate separator
-        scheme_part, rest = uri.split(separator, 1)
+    @staticmethod
+    def _check_credentials_format(uri: str, db_type: str) -> None:
+        rest = uri.split('://', 1)[1]
+        if ':' in rest and '@' not in rest:
+            msg = (
+                f'URI для {db_type.upper()} должен содержать символ "@" для '
+                'разделения credentials (user:password) и хоста.\n'
+                f'Формат: {db_type}://username:password@hostname:port/database\n'
+                f'Получено: {Settings._mask_uri(uri)}'
+            )
+            raise ValueError(msg)
 
-        if '@' not in rest:
-            return uri
+    @staticmethod
+    def _parse_uri(uri: str, db_type: str):
+        try:
+            return urlparse(uri)
+        except Exception as exc:
+            msg = f'Некорректный URI для {db_type.upper()}: {exc!r}\nURI: {Settings._mask_uri(uri)}'
+            raise ValueError(msg) from exc
 
-        # Find the last @ (separator between credentials and host)
-        last_at_idx = rest.rfind('@')
-        credentials_part = rest[:last_at_idx]
-        host_part = rest[last_at_idx + 1 :]
-
-        # No credentials or no password means no masking needed
-        if not credentials_part or ':' not in credentials_part:
-            return uri
-
-        # Split on first colon to find user/password separator
-        colon_idx = credentials_part.find(':')
-        user_part = credentials_part[:colon_idx]
-
-        # Reconstruct with masked password
-        return f'{scheme_part}{separator}{user_part}:***@{host_part}'
+    @staticmethod
+    def _check_no_scheme(uri: str, db_type: str) -> None:
+        if db_type == 'oracle':
+            if not uri.replace('_', '').replace('-', '').isalnum():
+                raise ValueError(
+                    'Для Oracle ожидается URI (oracle://...) или TNS name, '
+                    f'получено: {Settings._mask_uri(uri)}'
+                )
+        else:
+            raise ValueError(
+                'Для PostgreSQL требуется URI со схемой (postgresql://...), '
+                f'получено: {Settings._mask_uri(uri)}'
+            )
 
     @model_validator(mode='after')
     def validate_oracle_lib_dir(self) -> Settings:
@@ -353,38 +387,77 @@ class Settings(BaseSettings):
             data['db_connect_uri'] = self.mask_connection_string(self.db_connect_uri)
         return data
 
+    @staticmethod
+    def mask_connection_string(uri: str) -> str:
+        if not uri or '://' not in uri:
+            return uri
+
+        try:
+            parsed = make_url(uri)
+            if parsed.password:
+                # Return masked version using SQLAlchemy's URL rendering
+                return str(parsed._replace(password='***'))
+
+            return uri
+        except Exception:
+            return uri
+
 
 def load_config(env_file: str = '.env') -> Settings:
-    """Загружает конфигурацию из .env файла."""
+    """
+    Загружает конфигурацию из .env файла.
+
+    Args:
+        env_file: Путь к .env файлу (по умолчанию '.env')
+
+    Returns:
+        Settings: Объект конфигурации
+
+    Raises:
+        FileNotFoundError: Если .env файл не найден
+        ValidationError: Если конфигурация невалидна
+    """
     env_path = Path(env_file)
     if not env_path.exists():
         error_msg = f'Файл конфигурации не найден: {env_path.absolute()}'
+        # Пытаемся залогировать; используем fallback на стандартный логгер
         logger = get_logger('config') if LOGGER_AVAILABLE else logging.getLogger('config')
         logger.error(error_msg)
+
         raise FileNotFoundError(error_msg)
+
     try:
-        # Use python-dotenv to load variables from specified file
-        load_dotenv(env_path)
-        return Settings()  # type: ignore[call-arg]
+        # Устанавливаем рабочую директорию родителя .env файла
+        # BaseSettings по умолчанию ищет .env в текущей директории
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(env_path.parent)
+            return Settings()  # type: ignore[call-arg]
+        finally:
+            os.chdir(old_cwd)
     except ValidationError as e:
         full_error_msg = _format_validation_error(e)
         raise ValueError(full_error_msg) from e
 
 
 def _format_validation_error(e: ValidationError) -> str:
+    """Форматирует ValidationError в человекочитаемую строку и пытается залогировать."""
     error_messages = []
     for error in e.errors():
         field = ' -> '.join(str(loc) for loc in error['loc'])
         msg = error['msg']
-        error_messages.append(f' • {field}: {msg}')
+        error_messages.append(f'  • {field}: {msg}')
+
     formatted_errors = '\n'.join(error_messages)
     full_error_msg = f'Ошибка валидации конфигурации:\n{formatted_errors}'
+
     if LOGGER_AVAILABLE:
         try:
             logger = get_logger('oracle_exporter.config')
             logger.exception(full_error_msg)
         except Exception:
             logging.getLogger('oracle_exporter.config').exception('Failed to log validation error')
+
     return full_error_msg
 
 
@@ -394,8 +467,18 @@ def print_config_summary(
     mask_sensitive: bool = True,
     logger: logging.Logger | None = None,
 ) -> None:
-    """Выводит сводку конфигурации с маскировкой чувствительных данных."""
+    """
+    Выводит сводку конфигурации (с маскировкой чувствительных данных).
+
+    Args:
+        config: Объект конфигурации Settings
+        mask_sensitive: Маскировать ли чувствительные данные (по умолчанию True)
+        logger: Logger для вывода. Если None, выводит в консоль через print()
+    """
+    # Получаем данные (замаскированные или оригинальные)
     masked = config.model_dump_masked() if mask_sensitive else config.model_dump()
+
+    # Определяем секции для вывода
     sections = [
         ('База данных', ['db_type', 'db_connect_uri', 'lib_dir']),
         ('Логирование', ['log_level', 'log_file']),
@@ -415,6 +498,8 @@ def print_config_summary(
             ],
         ),
     ]
+
+    # Use provided logger; otherwise print()
     if logger:
         _log_config_header(logger)
         for section_name, params in sections:
@@ -425,6 +510,7 @@ def print_config_summary(
 
 
 def _log_config_header(logger: logging.Logger) -> None:
+    """Выводит заголовок конфигурации в logger."""
     logger.info('=' * 60)
     logger.info('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
     logger.info('=' * 60)
@@ -436,20 +522,29 @@ def _log_config_section(
     config_data: dict[str, object],
     logger: logging.Logger,
 ) -> None:
+    """Выводит секцию конфигурации в logger."""
     logger.info('')
     logger.info('[%s]', section_name)
     logger.info('-' * 40)
+
     for param in params:
         value = config_data.get(param)
+        # Пропускаем None значения (кроме lib_dir для не-Oracle)
         if value is None and param != 'lib_dir':
             continue
+
+        # Форматируем название параметра
         display_name = param.replace('_', ' ').title()
+
+        # Специальная обработка для некоторых параметров
         if param == 'lib_dir' and value is None:
-            continue
-        logger.info(' %-28s: %s', display_name, value)
+            continue  # Не показываем lib_dir если не задан
+
+        logger.info('  %-28s: %s', display_name, value)
 
 
 def _log_config_footer(logger: logging.Logger) -> None:
+    """Выводит футер конфигурации в logger."""
     logger.info('')
     logger.info('=' * 60)
 
@@ -458,37 +553,45 @@ def _print_config_to_console(
     sections: list[tuple[str, list[str]]],
     config_data: dict[str, object],
 ) -> None:
+    """Выводит конфигурацию в консоль через print()."""
     print('\n' + '=' * 60)
     print('КОНФИГУРАЦИЯ ПРИЛОЖЕНИЯ')
     print('=' * 60)
+
     for section_name, params in sections:
         print(f'\n[{section_name}]')
         print('-' * 40)
+
         for param in params:
             value = config_data.get(param)
+            # Пропускаем None значения (кроме lib_dir для не-Oracle)
             if value is None and param != 'lib_dir':
                 continue
+
+            # Форматируем название параметра
             display_name = param.replace('_', ' ').title()
+
+            # Специальная обработка для некоторых параметров
             if param == 'lib_dir' and value is None:
-                continue
-            print(f' {display_name:28}: {value}')
+                continue  # Не показываем lib_dir если не задан
+
+            print(f'  {display_name:28}: {value}')
+
     print('=' * 60 + '\n')
 
 
 def main() -> None:
     """Демонстрация работы модуля."""
     try:
-        # Демонстрация маскирования пароля в URI
-        test_uri = 'oracle+cx_oracle://scott:Tiger2024@localhost:1521/xe'
-        masked = Settings.mask_connection_string(test_uri)
-        print(f'Маскирование URI: {masked}')
-
-        # Загрузка конфигурации из .env
         config = load_config()
         print_config_summary(config)
+        print(
+            Settings.mask_connection_string('oracle+cx_oracle://scott:Tiger2024@localhost:1521/xe')
+        )
         print('\n✓ Конфигурация успешно загружена из .env')
         print(f'✓ DB_TYPE: {config.db_type}')
         print('✓ Оригинальный URI доступен через: config._original_db_connect_uri')
+
     except (FileNotFoundError, ValueError) as e:
         print(f'\n✗ Ошибка: {e}', file=sys.stderr)
         sys.exit(1)

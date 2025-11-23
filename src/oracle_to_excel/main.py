@@ -5,16 +5,16 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from oracle_to_excel.database import (
+    DBType,
+    get_connection,
+    get_db_info,
+)
 from oracle_to_excel.env_config import (
     DEFAULT_CONFIG,
     Settings,
     load_config,
     print_config_summary,
-)
-from oracle_to_excel.database import (
-    DBType,
-    get_connection,
-    get_db_info,
 )
 from oracle_to_excel.logger import setup_logging
 
@@ -25,7 +25,7 @@ def _load_config() -> Settings | None:
         return load_config()
     except (FileNotFoundError, ValueError):
         logger = logging.getLogger('oracle_exporter.main')
-        logger.exception('Ошибка при загрузке конфигурации')
+        logger.error('Ошибка при загрузке конфигурации')  # noqa: TRY400
         return None
 
 
@@ -51,14 +51,19 @@ def main() -> None:
     # 1. Загружаем конфигурацию
     config = _load_config()
     if config is None:
-        logger.error('Не удалось загрузить конфигурацию. Завершение.',)
+        logger.error(
+            'Не удалось загрузить конфигурацию. Завершение.',
+        )
         sys.exit(1)
 
     # 2. Пересоздаем логгер с параметрами из конфига (если путь к логу или log_level отличаются)
     logfile_path = Path(config.log_file)
-    if logfile_path != default_logfile or logging.getLevelName(logger.getEffectiveLevel()) != config.log_level:
+    if (
+        logfile_path != default_logfile
+        or logging.getLevelName(logger.getEffectiveLevel()) != config.log_level
+    ):
         logger = _setup_logger_from_config(config)
-        logger.info("Логгер перенастроен по конфигу")
+        logger.info('Логгер перенастроен по конфигу')
     logger.info('Запуск приложения oracle_to_excel')
 
     # 3. Выводим сводку конфигурации (теперь с logger!)
@@ -73,23 +78,16 @@ def main() -> None:
     else:
         connection_string = config.db_connect_uri
 
-    # is_valid, error_msg = validate_connection_string(connection_string)
-    # if not is_valid:
-    #     logger.error(f'Некорректный connection string: {error_msg}')
-    #     sys.exit(1)
-
     # 6. Получаем информацию о БД
-    logger.info(f'Подключение к {db_type} БД...')
+    logger.info('Подключение к %s БД...', db_type)
     try:
         # Передаём lib_dir только для Oracle
         # Для PostgreSQL и SQLite config.lib_dir будет None (игнорируется)
         with get_connection(
-            connection_string,
-            db_type,
-            lib_dir=config.lib_dir if db_type == 'oracle' else None
+            connection_string, db_type, lib_dir=config.lib_dir if db_type == 'oracle' else None
         ) as conn:
             db_info = get_db_info(conn, db_type)
-            logger.info(f'Подключение успешно: {db_info}')
+            logger.info('Подключение успешно: %s', db_info)
             print(f'\n✓ Подключение к {db_type} успешно установлено')
             print(f'  База данных: {db_info.get("database", "N/A")}')
             print(f'  Версия: {db_info.get("version", "N/A")}')

@@ -183,7 +183,8 @@ def detect_db_type(connection_string: ConnectionString) -> DBType:
     db_type, is_valid, error = detect_and_validate_db_type(connection_string)
     if not is_valid:
         raise DatabaseTypeDetectionError(error)
-    return db_type  # type: ignore[return-value]
+    # db_type гарантированно не 'если is_valid=True
+    return cast(DBType, db_type)
 
 
 def validate_connection_string(connection_string: ConnectionString) -> tuple[bool, str]:
@@ -236,7 +237,7 @@ def create_connection(
         detected_type, is_valid, error = detect_and_validate_db_type(connection_string)
         if not is_valid:
             raise ValueError(f'Невалидный connection string: {error}')
-        db_type = detected_type  # type: ignore[assignment]
+        db_type = cast(DBType, detected_type)
 
     logger.debug('Creating connection to %s database', db_type)
 
@@ -484,7 +485,7 @@ def get_connection(
             try:
                 connection.rollback()
                 logger.debug('Выполнен rollback транзакции')
-            except Exception:  # noqa: S110
+            except Exception:
                 pass
         raise
     finally:

@@ -5,6 +5,8 @@ Configures centralized logging with support for
 file rotation and sensitive data filtering.
 """
 
+from __future__ import annotations
+
 import logging
 import logging.handlers
 import re

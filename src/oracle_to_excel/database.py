@@ -4,6 +4,7 @@
 Поддерживает Oracle, PostgreSQL и SQLite через унифицированный интерфейс.
 Использует возможности Python 3.14 и централизованное логирование.
 """
+from __future__ import annotations
 
 import os
 import platform
