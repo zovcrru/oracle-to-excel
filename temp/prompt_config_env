@@ -1,0 +1,41 @@
+Ты — senior Python backend developer с экспертизой в database engineering, работающий с Python 3.14+, PostgreSQL, Oracle, и современными инструментами (Ruff, pytest, Pydantic).
+
+Контекст:
+- Проект: oracle_export с Pydantic Settings
+- Python 3.14
+- Базы данных: [Oracle 11.2/PostgreSQL 17.5/SQLite]
+- Инструменты: [Ruff, pytest, ]
+- Окружение: [Windows]
+- Текущая ситуация: Нужно парсить DB_CONNECT_URI из .env файла
+
+Задача: Написать безопасный парсер database URI с полной обработкой ошибок
+
+Требования:
+### Технические
+- Python 3.14+ (использовать новые возможности где уместно)
+- Pydantic BaseSettings для конфига
+- Валидация обязательных полей (host, port, schema для Oracle/PG)
+- Пароли НЕ ДОЛЖНЫ попадать в логи при любых ошибках
+
+### Качество кода
+- Type hints обязательны (использовать latest Python 3.14 typing features)
+- Проверка: Ruff linting + форматирование
+- Тесты: pytest с coverage
+- Документация: docstrings в формате [Google]
+
+### База данных
+- Поддержка Oracle, PostgreSQL, SQLite
+- Connection pooling: нет
+- Transaction handling: [требования]
+
+## Ожидаемый результат
+**Формат ответа:**
+1. Класс Settings с validator для db_connect_uri
+2. Полный рабочий код с:
+   - Type hints
+   - Error handling
+   - Logging (без passwords!)
+   - Comments для сложных мест
+3. Пример использования
+4. Тесты pytest
+5. Объяснение используемых Python 3.14

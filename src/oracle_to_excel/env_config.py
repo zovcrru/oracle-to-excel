@@ -31,6 +31,8 @@ VALID_DB_TYPES: Final[frozenset[str]] = frozenset((
 
 
 class ConfigDict(TypedDict):
+    """Типизированный словарь для конфигурационных параметров."""
+
     LOG_LEVEL: str
     OUTPUT_DIR: str
     LOG_FILE: str
@@ -151,6 +153,21 @@ class Settings(BaseSettings):
     )
 
     _original_db_connect_uri: str | None = None
+
+    @property
+    # публичное свойства в классе Config
+    def connection_string_for_logging(self) -> str:
+        """
+        Returns a connection string suitable for logging purposes.
+
+        Uses the original connection string if available, otherwise falls back to the current one.
+        This ensures that logs contain the original connection string even if it was modified
+        during processing.
+
+        Returns:
+            str: The connection string to use in logs, with preference for the original value.
+        """
+        return self._original_db_connect_uri or self.db_connect_uri
 
     @field_validator(
         'chunk_size',

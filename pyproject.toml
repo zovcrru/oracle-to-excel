@@ -118,6 +118,7 @@ ignore = [
     "D404",
     "D405",
     #"E501",    # Avoid enforcing line-length violations (`E501`)
+    "E203",    # whitespace before ':'
     "ISC001",  # implicit string concat conflicts with `ruff format`
     "ISC003",  # prefer explicit string concat over implicit concat
     "PLR09",   # we have our own complexity rules

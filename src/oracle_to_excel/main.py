@@ -73,11 +73,7 @@ def main() -> None:
     db_type = cast(DBType, config.db_type)
 
     # 5. Валидируем connection string
-    connection_string = config._original_db_connect_uri or config.db_connect_uri  # noqa: SLF001
-    # if config._original_db_connect_uri:  # noqa: SLF001
-    #     connection_string = config._original_db_connect_uri  # noqa: SLF001
-    # else:
-    #     connection_string = config.db_connect_uri
+    connection_string = config.connection_string_for_logging
 
     # 6. Получаем информацию о БД
     logger.info('Подключение к %s БД...', db_type)
