@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 import sys
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, TypedDict, cast
 
 from dotenv import load_dotenv
 from pydantic import Field, ValidationError, ValidationInfo, field_validator, model_validator
@@ -22,26 +21,34 @@ try:
 except Exception:
     LOGGER_AVAILABLE = False
 
-VALID_DB_TYPES: Final[frozenset[str]] = frozenset(
-    ('oracle', 'postgres', 'postgresql', 'sqlite', 'sqlite3')
-)
+VALID_DB_TYPES: Final[frozenset[str]] = frozenset((
+    'oracle',
+    'postgres',
+    'postgresql',
+    'sqlite',
+    'sqlite3',
+))
 
 
-def _get_uri_separator(uri: str) -> str | None:
-    """Определить разделитель схемы в URI.
+class ConfigDict(TypedDict):
+    LOG_LEVEL: str
+    OUTPUT_DIR: str
+    LOG_FILE: str
+    FETCH_ARRAY_SIZE: int
+    CHUNK_SIZE: int
+    QUERY_TIMEOUT: int
+    MAX_COLUMN_WIDTH: int
+    NULL_VALUE_REPLACEMENT: str
+    WRAP_LONG_TEXT: bool
+    MAX_ROWS_PER_SHEET: int
+    ENABLE_BATCH_PROCESSING: bool
+    BATCH_SIZE: int
+    SHOW_PROGRESS_BAR: bool
+    PROGRESS_UPDATE_INTERVAL: int
 
-    Возвращает '://', ':/', '//' или None.
-    """
-    if '://' in uri:
-        return '://'
-    if ':/' in uri:
-        return ':/'
-    if '//' in uri:
-        return '//'
-    return None
 
-
-DEFAULT_CONFIG: Mapping[str, int | str | bool] = {
+# Mapping[str, int | str | bool] = {
+DEFAULT_CONFIG: ConfigDict = {
     'LOG_LEVEL': 'INFO',
     'OUTPUT_DIR': './exports',
     'LOG_FILE': './logs/oracle_export.log',
@@ -352,6 +359,20 @@ class Settings(BaseSettings):
         if self.db_connect_uri:
             data['db_connect_uri'] = self.mask_connection_string(self.db_connect_uri)
         return data
+
+
+def _get_uri_separator(uri: str) -> str | None:
+    """Определить разделитель схемы в URI.
+
+    Возвращает '://', ':/', '//' или None.
+    """
+    if '://' in uri:
+        return '://'
+    if ':/' in uri:
+        return ':/'
+    if '//' in uri:
+        return '//'
+    return None
 
 
 def load_config(env_file: str = '.env') -> Settings:

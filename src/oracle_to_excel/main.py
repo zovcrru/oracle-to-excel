@@ -23,7 +23,7 @@ def _load_config() -> Settings | None:
     """Загружает конфигурацию из .env файла."""
     try:
         return load_config()
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError, ValueError:
         logger = logging.getLogger('oracle_exporter.main')
         logger.error('Ошибка при загрузке конфигурации')  # noqa: TRY400
         return None
@@ -73,10 +73,11 @@ def main() -> None:
     db_type = cast(DBType, config.db_type)
 
     # 5. Валидируем connection string
-    if config._original_db_connect_uri:
-        connection_string = config._original_db_connect_uri
-    else:
-        connection_string = config.db_connect_uri
+    connection_string = config._original_db_connect_uri or config.db_connect_uri  # noqa: SLF001
+    # if config._original_db_connect_uri:  # noqa: SLF001
+    #     connection_string = config._original_db_connect_uri  # noqa: SLF001
+    # else:
+    #     connection_string = config.db_connect_uri
 
     # 6. Получаем информацию о БД
     logger.info('Подключение к %s БД...', db_type)

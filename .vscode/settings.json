@@ -1,14 +1,16 @@
 {
   "window.zoomLevel": 1,
+  "workbench.iconTheme": "Monokai Pro Icons",
   "editor.minimap.enabled": false,
+  "telemetry.editStats.enabled": false,
+  "telemetry.feedback.enabled": false,
+  "ipynb.pasteImagesAsAttachments.enabled": false,
   "git.supportCancellation": true,
   "git.autofetch": true,
-  "ipynb.pasteImagesAsAttachments.enabled": false,
-  "editor.fontSize": 16,
-  "editor.codeActionsOnSave": {
-    "onFocusChange": "explicit",
-    "source.organizeImports.ruff": "always"
-  },
+  "git.inputValidationLength": 100,
+  "git.inputValidationSubjectLength": null,
+  "git.mergeEditor": true,
+  "git.showPushSuccessNotification": true,
   "tabnine.experimentalAutoImports": true,
   "tabnine.receiveBetaChannelUpdates": true,
   "files.associations": {
@@ -19,6 +21,17 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
   },
+  "chat.editor.fontSize": 16,
+  "editor.fontSize": 16,
+  "editor.codeActionsOnSave": {
+    "onFocusChange": "explicit",
+    "source.organizeImports.ruff": "always"
+  },
+  "editor.inlayHints.maximumLength": 0,
+  "editor.defaultFormatter": "charliermarsh.ruff",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.formatOnType": true,
   "terminal.integrated.profiles.windows": {
     "PowerShell": {
       "source": "PowerShell",
@@ -46,33 +59,24 @@
   "terminal.integrated.copyOnSelection": true,
   "terminal.integrated.fontFamily": "FiraCode Nerd Font",
   "terminal.integrated.confirmOnExit": "hasChildProcesses",
+  "terminal.integrated.shellIntegration.decorationsEnabled": "never",
+  "terminal.integrated.shellIntegration.enabled": true,
   "python.terminal.activateEnvInCurrentTerminal": true,
   "python.terminal.executeInFileDir": true,
-  "python.defaultInterpreterPath": "",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.createEnvironment.trigger": "prompt",
   "python.languageServer": "Pylance",
   "python.testing.pytestEnabled": true,
-  "git.inputValidationLength": 100,
-  "git.inputValidationSubjectLength": null,
-  "git.mergeEditor": true,
   "python.testing.pytestPath": ".venv\\Scripts\\py.test.exe",
-  "workbench.iconTheme": "Monokai Pro Icons",
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "basic",
   "flake8.importStrategy": "fromEnvironment",
-  "git.showPushSuccessNotification": true,
-  "editor.inlayHints.maximumLength": 0,
-  "editor.defaultFormatter": "charliermarsh.ruff",
-  "terminal.integrated.shellIntegration.decorationsEnabled": "never",
-  "terminal.integrated.shellIntegration.enabled": true,
-  "chat.editor.fontSize": 16,
-  "ruff.interpreter": [
-    "C:\\Work\\2025\\oracle-to-excel\\.venv\\Scripts\\python.exe"
-  ],
   "isort.importStrategy": "fromEnvironment",
   "ruff.path": [
-    "C:\\Work\\2025\\oracle-to-excel\\.venv\\Scripts\\ruff.exe"
+    "${workspaceFolder}\\.venv\\Scripts\\ruff.exe"
   ],
-  "telemetry.editStats.enabled": false,
-  "telemetry.feedback.enabled": false,
+  "ruff.interpreter": [
+    "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+  ],
+  "ruff.format.preview": true,
 }

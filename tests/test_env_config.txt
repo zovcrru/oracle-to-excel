@@ -11,7 +11,7 @@ pytest test_env_config.py --cov=env_config --cov-report=html
 pytest test_env_config.py -k "password" -v
 
 # Запуск только критичных тестов логирования
-pytest test_env_config.py::TestLoggingPasswordProtection -v
+python -m pytest tests/test_env_config.py::TestLoggingPasswordProtection -v
 
 python -m pytest tests/test_env_config.py -v -s
 Флаг -s покажет print-вывод и поможет понять, где найден файл.
